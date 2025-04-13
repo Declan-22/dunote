@@ -1,6 +1,5 @@
 .qodo
 .env
-Modelfile
 venv
 __pycache__
 
