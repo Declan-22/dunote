@@ -7,6 +7,7 @@
   import { user } from '$lib/stores/userStore';
   import { supabase } from '$lib/supabaseClient';
   import { Drawflow } from 'drawflow';
+  import NotesList from '$lib/components/NotesList.svelte';
 
   
   // TipTap imports
@@ -38,9 +39,32 @@
     ChevronDown, X, Hash, PlusCircle, Code, Quote, Type,
     Paperclip, Tag as TagIcon
   } from 'lucide-svelte';
+  
+  
+  interface Note {
+    id: string;
+    title: string;
+    content: string;
+    tags: string[];
+    created_at: string;
+    updated_at: string;
+    user_id?: string;
+    node_id?: string;
+    attachedNodes: Partial<Node>[];
+    ts_vector?: string;
+  }
+
 
   let editor: Editor;
-  let currentNote: Note = noteStore.createNewNote();
+  let currentNote: Note = {
+    id: '',
+    title: '',
+    content: '',
+    tags: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    attachedNodes: []
+  };
   let canvas: HTMLCanvasElement | null = null;
   let isSaving = false;
   let showAttachModal = false;
@@ -106,18 +130,21 @@
     const noteId = url.searchParams.get('id');
     
     if (noteId) {
-      loadNote(noteId);
+      (async () => {
+        await loadNote(noteId);
+      })();
+    } else {
+      // Create new note properly
+      currentNote = {
+        id: '',
+        title: '',
+        content: '',
+        tags: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        attachedNodes: []
+      };
     }
-    
-    // Set up document click listener to hide toolbar when clicking outside
-    document.addEventListener('click', handleDocumentClick);
-    
-    return () => {
-      if (editor) {
-        editor.destroy();
-      }
-      document.removeEventListener('click', handleDocumentClick);
-    };
   });
   
   onDestroy(() => {
@@ -309,11 +336,13 @@
   
   function attachNode(nodeId: string) {
     const node = availableNodes.find(n => n.id === nodeId);
-    if (node && !currentNote.attachedNodes.some(n => n.id === nodeId)) {
-      currentNote.attachedNodes = [...currentNote.attachedNodes, node];
-      autoSave();
+    if (node && currentNote) {
+      if (!currentNote.attachedNodes.some(n => n.id === nodeId)) {
+        currentNote.attachedNodes = [...currentNote.attachedNodes, node];
+        autoSave();
+      }
+      showAttachModal = false;
     }
-    showAttachModal = false;
   }
 
   function detachNode(nodeId: string) {
@@ -364,27 +393,44 @@
       autoSave();
   }
 
-  async function insertImage(file: File) {
-    try {
-      const { data, error } = await supabase.storage
-        .from('note-images')
-        .upload(`${$user?.id}/${file.name}`, file);
-      
-    if (error) throw error;
+  async function insertImage() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+              try {
+            const { data, error } = await supabase.storage
+              .from('note-images')
+              .upload(`${$user?.id}/${file.name}`, file);
+            
+          if (error) throw error;
+          
+          const { data: publicUrlData } = supabase.storage
+            .from('note-images')
+            .getPublicUrl(data.path);
+          
+          editor.chain().setImage({ src: publicUrlData.publicUrl }).run();
+        } catch (e) {
+          console.error("Image upload failed");
+        }
+       }
+     };
+     input.click();
+    }
     
-    const { data: publicUrlData } = supabase.storage
-      .from('note-images')
-      .getPublicUrl(data.path);
-    
-    editor.chain().setImage({ src: publicUrlData.publicUrl }).run();
-  } catch (e) {
-    console.error("Image upload failed");
-  }
-}
+
+
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
-
+<div class="notes-app h-screen flex">
+  <!-- Notes List Sidebar -->
+  <div class="w-80 border-r border-[var(--border-color)]">
+    <NotesList />
+  </div>
+<div class="flex-1 flex flex-col">
 <div class="notes-app h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
   <!-- Status bar -->
   <div class="bg-[var(--bg-secondary)] py-2 px-4 flex justify-between items-center border-b border-[var(--border-color)] text-xs">
@@ -813,6 +859,8 @@
       </div>
     </div>
   {/if}
+</div>
+</div>
 </div>
 
 <style>

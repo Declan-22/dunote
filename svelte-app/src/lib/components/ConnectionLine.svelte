@@ -67,20 +67,23 @@
   <path 
       d={pathCommand}
       class={pathClass}
-      marker-end="url(#arrowhead)"
+      marker-start="url(#startdot)"
   />
   
   <defs>
       <marker
-          id="arrowhead"
-          viewBox="0 0 15 10"
-          refX="8"
+          id="startdot"
+          viewBox="0 0 10 10"
+          refX="5"
           refY="5"
           markerWidth="6"
-          markerHeight="4"
+          markerHeight="6"
           orient="auto"
       >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--brand-green-light)" />
+          <circle cx="5" cy="5" r="3" 
+
+                stroke="var(--text-primary)" 
+                stroke-width="2"/>
       </marker>
   </defs>
 </svg>
@@ -88,8 +91,8 @@
 <style>
     .connection-path {
         fill: none;
-        stroke: var(--brand-green-light);
-        stroke-width: 2px;
+        stroke: var(--text-primary);
+        stroke-width: 1.5px;
         pointer-events: none;
         transition: stroke-width 0.2s ease;
     }

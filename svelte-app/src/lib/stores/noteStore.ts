@@ -1,22 +1,19 @@
 // src/lib/stores/noteStore.ts
 import { writable } from 'svelte/store';
 import { supabase } from '$lib/supabaseClient';
+import type { Node } from '$lib/types/nodes';
 
 export interface Note {
   id: string;
   title: string;
   content: string;
   tags: string[];
-  attachedNodes: Array<{ id: string; title: string }>;
   created_at: string;
   updated_at: string;
-  user_id?: string;
+  user_id: string;
+  ts_vector?: string;
+  nodes?: Partial<Node>[];
   node_id?: string;
-}
-
-interface Node {
-  id: string;
-  title: string;
 }
 
 function createNoteStore() {
@@ -25,157 +22,159 @@ function createNoteStore() {
   return {
     subscribe,
     set,
-    update, // Expose the underlying update function
+    update,
+
+    async loadNotes(page = 1, itemsPerPage = 20): Promise<Note[]> {
+      const from = (page - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
     
-    async loadNotes(userId: string) {
       const { data, error } = await supabase
         .from('notes')
-        .select('*, attachedNodes:node_id (id, title)')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-      
-      if (!error) set(data || []);
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+    
+      return error ? [] : data || [];
     },
 
-    async saveNote(note: Note) {
-      const noteToSave = {
-        ...note,
-        // Flatten attachedNodes for Supabase storage
-        node_id: note.attachedNodes.length > 0 ? note.attachedNodes[0].id : null
-      };
-
+    async loadNoteById(id: string) {
       const { data, error } = await supabase
         .from('notes')
-        .upsert(noteToSave)
-        .select('*, attachedNodes:node_id (id, title)')
+        .select(`
+          *,
+          note_nodes:note_nodes (
+            node:node_id (id, type, position, data, siloId)
+          )
+        `)
+        .eq('id', id)
         .single();
 
-      if (!error) {
-        update(notes => notes.map(n => n.id === note.id ? data : n));
+      if (error) return null;
+
+      return {
+        ...data,
+        nodes: (data as any).note_nodes?.map(({ node }: { node: Partial<Node> }) => ({
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: node.data,
+          siloId: node.siloId
+        })) ?? []
+      };
+    },
+    async createNewNote(): Promise<Note> {
+      try {
+        const { data, error } = await supabase
+          .from('notes')
+          .insert({ title: 'Untitled Note' })
+          .select()
+          .single();
+    
+        if (error) throw error;
+        return data;
+      } catch (error) {
+        console.error('Note creation failed:', error);
+        throw error;
       }
+    },
+
+    async saveNote(note: Partial<Note>) {
+      const { data, error } = await supabase
+        .from('notes')
+        .upsert(note)
+        .select()
+        .single();
+    
+      if (error) throw error;
       return data;
     },
 
-    createNewNote(): Note {
-      return {
-        id: `draft-${Date.now()}`,
-        title: '',
-        content: '',
-        tags: [],
-        attachedNodes: [],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+    async getNoteById(id: string): Promise<Note | null> {
+      const { data, error } = await supabase
+        .from('notes')
+        .select()
+        .eq('id', id)
+        .single();
+    
+      if (error) return null;
+      return data;
     },
 
-    async deleteNote(id: string) {
-      await supabase.from('notes').delete().eq('id', id);
-      update(notes => notes.filter(n => n.id !== id));
+    async deleteNote(id: string): Promise<void> {
+      const { error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', id);
+    
+      if (error) throw error;
+      noteStore.update(notes => notes.filter(n => n.id !== id));
     },
 
-    // Specific update functions for common operations
-    updateNoteContent(id: string, content: string) {
-      update(notes => notes.map(note => 
-        note.id === id 
-          ? { ...note, content, updated_at: new Date().toISOString() } 
-          : note
-      ));
+    async attachNode(noteId: string, nodeId: string) {
+      const { error } = await supabase
+        .from('note_nodes')
+        .insert({ note_id: noteId, node_id: nodeId });
+
+      if (!error) {
+        update(notes => notes.map(note => {
+          if (note.id === noteId) {
+            const existingNodes = note.nodes || [];
+            return {
+              ...note,
+              nodes: [...existingNodes, { id: nodeId }]
+            };
+          }
+          return note;
+        }));
+      }
+      return !error;
     },
 
-    updateNoteTitle(id: string, title: string) {
-      update(notes => notes.map(note => 
-        note.id === id 
-          ? { ...note, title, updated_at: new Date().toISOString() } 
-          : note
-      ));
+    async detachNode(noteId: string, nodeId: string) {
+      const { error } = await supabase
+        .from('note_nodes')
+        .delete()
+        .eq('note_id', noteId)
+        .eq('node_id', nodeId);
+
+      if (!error) {
+        update(notes => notes.map(note => {
+          if (note.id === noteId && note.nodes) {
+            return {
+              ...note,
+              nodes: note.nodes.filter(n => n.id !== nodeId)
+            };
+          }
+          return note;
+        }));
+      }
+      return !error;
     },
 
-    addTagToNote(id: string, tag: string) {
-      update(notes => notes.map(note => {
-        if (note.id === id && !note.tags.includes(tag)) {
-          return { 
-            ...note, 
-            tags: [...note.tags, tag],
-            updated_at: new Date().toISOString()
-          };
-        }
-        return note;
-      }));
-    },
-
-    removeTagFromNote(id: string, tag: string) {
-      update(notes => notes.map(note => {
-        if (note.id === id) {
-          return { 
-            ...note, 
-            tags: note.tags.filter(t => t !== tag),
-            updated_at: new Date().toISOString()
-          };
-        }
-        return note;
-      }));
-    },
-
-    attachNodeToNote(noteId: string, node: Node) {
-      update(notes => notes.map(note => {
-        if (note.id === noteId && !note.attachedNodes.some(n => n.id === node.id)) {
-          return { 
-            ...note, 
-            attachedNodes: [...note.attachedNodes, node],
-            updated_at: new Date().toISOString()
-          };
-        }
-        return note;
-      }));
-    },
-
-    detachNodeFromNote(noteId: string, nodeId: string) {
-      update(notes => notes.map(note => {
-        if (note.id === noteId) {
-          return { 
-            ...note, 
-            attachedNodes: note.attachedNodes.filter(n => n.id !== nodeId),
-            updated_at: new Date().toISOString()
-          };
-        }
-        return note;
-      }));
+    async searchNotes(query: string): Promise<Note[]> {
+      const { data, error } = await supabase
+        .from('notes')
+        .select()
+        .or(`title.ilike.%${query}%,content.ilike.%${query}%,tags.cs.{${query}}`)
+        .order('updated_at', { ascending: false });
+    
+      if (error) throw error;
+      return data;
     }
   };
 }
-// In noteStore.ts
-async function saveNote(note: Note) {
-    const noteToSave = {
-      ...note,
-      content: note.content || '',
-      title: note.title || 'Untitled',
-      ts_vector: note.title + ' ' + note.content // For full-text search
-    };
-  
-    const { data, error } = await supabase
-      .from('notes')
-      .upsert(noteToSave)
-      .select()
-      .single();
-  
-    if (!error) {
-      await supabase.rpc('update_note_tsvector', { note_id: data.id });
-    }
-    return data;
-  }
-  
-  // Create SQL function for search:
-  /*
-  create or replace function update_note_tsvector(note_id uuid)
-  returns void as $$
-  begin
-    update notes
-    set ts_vector = to_tsvector('english', title || ' ' || content)
-    where id = note_id;
-  end;
-  $$ language plpgsql;
-  */
 
-
-  
 export const noteStore = createNoteStore();
+
+export const createNewNote = async (): Promise<Note> => {
+  return {
+    id: '',
+    title: '',
+    content: '',
+    tags: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    nodes: [],
+    user_id: ''
+  };
+};

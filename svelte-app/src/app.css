@@ -233,7 +233,7 @@ body {
 
 .node:hover {
   z-index: 10;
-  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+
 }
 
 .connection-point {
@@ -322,13 +322,13 @@ svg {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: var(--shadow-sm);
+
   transition: all 0.2s ease;
 }
 
 .task-node:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+
 }
 
 .dependency-line {
@@ -342,20 +342,7 @@ svg {
   font-size: 0.8rem;
 }
 
-.status-not-started {
-  background: var(--brand-green-light);
-  color: var(--brand-green-dark);
-}
 
-.status-in-progress {
-  background: var(--accent-blue);
-  color: white;
-}
-
-.status-completed {
-  background: var(--neutral-300);
-  color: var(--neutral-700);
-}
 
 .error-banner {
   padding: 1rem;

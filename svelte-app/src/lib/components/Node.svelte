@@ -13,6 +13,8 @@
   export let viewport = { x: 0, y: 0, zoom: 1 };
   $: screenX = node.position.x * viewport.zoom + viewport.x;
   $: screenY = node.position.y * viewport.zoom + viewport.y;
+  import { noteStore } from '$lib/stores/noteStore';
+  import { user } from '$lib/stores/userStore';
 
   export let node: SiloNode;
   export let siloId: string;
@@ -20,7 +22,6 @@
   const dispatch = createEventDispatcher();
   let isDragging = false;
   let isExpanded = false;
-  let isStatusDropdownOpen = false;
   let isEditingTitle = false;
   let isNodePanelOpen = false;
   let startPos = { x: 0, y: 0 };
@@ -31,10 +32,24 @@
   let newTitle = '';
   let isAddingComment = false;
   let commentText = '';
+  // Add these variables to your script section
+  let isContextMenuOpen = false;
+  let contextMenuPosition = { x: 0, y: 0 };
+  let isStatusDropdownOpen = false;
+
+  let longPressTimeout: number;
+  let touchStartTime = 0;
+
+  // Add this function to get a short description
+  function getShortDescription(text: string): string {
+    const words = text.split(' ');
+    return words.slice(0, 5).join(' ') + (words.length > 5 ? '...' : '');
+  }
+
   
   $: nodeData = node.data || {};
   $: safeTitle = nodeData.title || nodeData.label || "Untitled Node";
-  $: safeDescription = nodeData.description || (nodeData.original_text || `No description provided for ${safeTitle}`);
+  $: safeDescription = nodeData.description || (nodeData.original_text || ` He ${safeTitle}`);
   $: safeUrl = nodeData.url ? validateUrl(nodeData.url) : null;
   $: isTaskNode = node.type === 'task';
   $: isResourceNode = node.type === 'resource';
@@ -77,6 +92,8 @@ function handleCommentKeydown(e) {
     cancelComment();
   }
 }
+
+
 
 // Save a new comment
 function saveComment() {
@@ -213,19 +230,112 @@ function toggleExpand(e) {
     }
   }
   function handleMouseDown(e: MouseEvent) {
-    // Don't drag from control elements
-    if (e.target && (e.target as HTMLElement).closest('.node-control-btn, .expanded-panel, .port, .status-selector')) {
-      return;
-    }
-    
-    isDragging = true;
-    startPos = { x: e.clientX, y: e.clientY };
-    
-    // Dispatch with node data for context in parent
-    dispatch('dragstart', { node });
-    
-    e.stopPropagation(); // Prevent panning
+  if (e.button === 2) { // Right click
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY);
+    return;
   }
+  
+  // Handle normal drag start
+  if (e.target && (e.target as HTMLElement).closest('.port, .context-menu, .edit-popup')) {
+    return;
+  }
+  
+  isDragging = true;
+  startPos = { x: e.clientX, y: e.clientY };
+  startNodePos = { x: node.position.x, y: node.position.y };
+  dispatch('dragstart', { node });
+  e.stopPropagation();
+}
+
+
+function showContextMenu(x: number, y: number) {
+  // Convert screen coordinates to viewport coordinates
+  const viewportX = (x - viewport.x) / viewport.zoom;
+  const viewportY = (y - viewport.y) / viewport.zoom;
+  
+  // Convert to local node coordinates
+  contextMenuPosition = {
+    x: viewportX - node.position.x,
+    y: viewportY - node.position.y
+  };
+  isContextMenuOpen = true;
+
+  // Close context menu when clicking outside
+  setTimeout(() => {
+    window.addEventListener('click', closeContextMenuOnClickOutside);
+  }, 10);
+}
+
+function closeContextMenu() {
+  isContextMenuOpen = false;
+  isStatusDropdownOpen = false;
+  window.removeEventListener('click', closeContextMenuOnClickOutside);
+}
+
+function closeContextMenuOnClickOutside(e: MouseEvent) {
+  if (nodeElement && !nodeElement.contains(e.target as Node)) {
+    closeContextMenu();
+  }
+}
+
+// Add touch support for mobile
+function handleTouchStart(e: TouchEvent) {
+  e.preventDefault();
+  
+  // Track time for distinguishing between tap and long press
+  touchStartTime = Date.now();
+  
+  // Set long press timeout
+  longPressTimeout = window.setTimeout(() => {
+    const touch = e.touches[0];
+    showContextMenu(touch.clientX, touch.clientY);
+  }, 500); // 500ms for long press
+  
+  // Normal drag start
+  if (e.target && !(e.target as HTMLElement).closest('.port, .context-menu, .edit-popup')) {
+    isDragging = true;
+    const touch = e.touches[0];
+    startPos = { x: touch.clientX, y: touch.clientY };
+    startNodePos = { x: node.position.x, y: node.position.y };
+    dispatch('dragstart', { node });
+  }
+  
+  e.stopPropagation();
+}
+
+function handleTouchMove(e: TouchEvent) {
+  // Clear long press timeout on move
+  window.clearTimeout(longPressTimeout);
+  
+  if (!isDragging) return;
+  
+  const touch = e.touches[0];
+  const dx = (touch.clientX - startPos.x) / viewport.zoom;
+  const dy = (touch.clientY - startPos.y) / viewport.zoom;
+  
+  dispatch('drag', { dx, dy, nodeId: node.id });
+  e.stopPropagation();
+}
+
+function handleTouchEnd(e: TouchEvent) {
+  // Clear long press timeout
+  window.clearTimeout(longPressTimeout);
+  
+  // Check if this was a quick tap (not a long press or drag)
+  const touchDuration = Date.now() - touchStartTime;
+  if (touchDuration < 500 && !isDragging) {
+    // Handle tap if needed
+  }
+  
+  if (isDragging) {
+    dispatch('dragend', { nodeId: node.id });
+    isDragging = false;
+  }
+  
+  e.stopPropagation();
+}
+
   
   function handleMouseMove(e: MouseEvent) {
     if (!isDragging) return;
@@ -258,35 +368,34 @@ function toggleExpand(e) {
 
   // Port connection handlers
   function handlePortMouseDown(e: MouseEvent, isOutput: boolean) {
-    e.stopPropagation();
-    
-    const portElement = e.currentTarget as HTMLElement;
-    const rect = portElement.getBoundingClientRect();
-    const portIndex = parseInt(portElement.dataset.portIndex || '0');
-    
-    const position = {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2
-    };
-    
-    dispatch('connectionstart', { 
-      nodeId: node.id,
-      position,
-      isOutput,
-      portIndex  // Add port index to event
-    });
-  }
+  e.stopPropagation();
+  
+  const portElement = e.currentTarget as HTMLElement;
+  const rect = portElement.getBoundingClientRect();
+  const portIndex = parseInt(portElement.dataset.portIndex || '0');
+  
+  // Calculate position in screen coordinates
+  const position = {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2
+  };
+  
+  dispatch('connectionstart', { 
+    nodeId: node.id,
+    position,
+    isOutput,
+    portIndex
+  });
+}
 
   function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
-    e.stopPropagation();
-    
     const portElement = e.currentTarget as HTMLElement;
     const portIndex = parseInt(portElement.dataset.portIndex || '0');
     
-    dispatch('connectionend', { 
+    dispatch('connectionend', {
       nodeId: node.id,
       isOutput,
-      portIndex  // Add port index to event
+      portIndex
     });
   }
   
@@ -466,8 +575,31 @@ function toggleExpand(e) {
   
   onMount(() => {
     document.addEventListener('click', handleClickOutside);
+    // Add right-click handler to prevent browser context menu
+    if (nodeElement) {
+      nodeElement.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showContextMenu(e.clientX, e.clientY);
+      });
+      
+      // Add touch event listeners for mobile
+      nodeElement.addEventListener('touchstart', handleTouchStart, { passive: false });
+      nodeElement.addEventListener('touchmove', handleTouchMove, { passive: false });
+      nodeElement.addEventListener('touchend', handleTouchEnd);
+    }
+    
     return () => {
       document.removeEventListener('click', handleClickOutside);
+      if (nodeElement) {
+        nodeElement.removeEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          showContextMenu(e.clientX, e.clientY);
+        });
+        nodeElement.removeEventListener('touchstart', handleTouchStart);
+        nodeElement.removeEventListener('touchmove', handleTouchMove);
+        nodeElement.removeEventListener('touchend', handleTouchEnd);
+      }
+      window.removeEventListener('click', closeContextMenuOnClickOutside);
     };
   });
 
@@ -486,36 +618,33 @@ function toggleExpand(e) {
   });
 
   function updatePortPositions() {
-    if (!nodeElement) return;
-    
-    const nodeRect = nodeElement.getBoundingClientRect();
-    const inputPort = nodeElement.querySelector('.input-port');
-    const outputPort = nodeElement.querySelector('.output-port');
-    
-    const newPortPositions: PortPosition = {
-      input: { x: 0, y: 30 },
-      output: { x: nodeRect.width, y: 30 }
-    };
-    
-    if (inputPort) {
-      const inputRect = inputPort.getBoundingClientRect();
-      newPortPositions.input = {
-        x: inputRect.left - nodeRect.left,
-        y: inputRect.top - nodeRect.top + inputRect.height / 2
-      };
+  if (!nodeElement) return;
+  
+  const nodeRect = nodeElement.getBoundingClientRect();
+  const inputPortEl = nodeElement.querySelector('.input-port');
+  const outputPortEl = nodeElement.querySelector('.output-port');
+  
+  if (!inputPortEl || !outputPortEl) return;
+  
+  const inputRect = inputPortEl.getBoundingClientRect();
+  const outputRect = outputPortEl.getBoundingClientRect();
+  
+  // Calculate port positions relative to the node's top-left corner
+  const portPositions = {
+    input: {
+      x: (inputRect.left + inputRect.width/2) - nodeRect.left,
+      y: (inputRect.top + inputRect.height/2) - nodeRect.top
+    },
+    output: {
+      x: (outputRect.left + outputRect.width/2) - nodeRect.left,
+      y: (outputRect.top + outputRect.height/2) - nodeRect.top
     }
-    
-    if (outputPort) {
-      const outputRect = outputPort.getBoundingClientRect();
-      newPortPositions.output = {
-        x: outputRect.left - nodeRect.left + outputRect.width,
-        y: outputRect.top - nodeRect.top + outputRect.height / 2
-      };
-    }
-    
-    // Update the node's port positions
-    setNodePortPositions(node.siloId, node.id, newPortPositions);
-  }
+  };
+  
+  // Update the node's port positions in the store
+  setNodePortPositions(siloId, node.id, portPositions);
+}
+
   function handleDragStart(e: MouseEvent) {
     e.stopPropagation(); // Prevent panning
         if (!nodeElement) return;
@@ -593,997 +722,478 @@ function toggleExpand(e) {
   on:mousemove={handleMouseMove}
   on:mouseup={handleMouseUp}
 >
-  <!-- Input ports on left side -->
-  <div class="ports-container input-ports">
-    {#each Array(node.data.inputPorts || 1) as _, i (i)}
-      <div 
-        class="port input-port"
-        data-port-index={i}
-        on:mousedown={(e) => handlePortMouseDown(e, false)}
-        on:mouseup={(e) => handlePortMouseUp(e, false)}
-      >
-        <div class="port-connector"></div>
-      </div>
-    {/each}
+  <!-- Input port (left side) -->
+  <div class="port input-port" 
+       on:mousedown={(e) => handlePortMouseDown(e, false)}
+       on:mouseup={(e) => handlePortMouseUp(e, false)}>
+    <div class="port-connector"></div>
   </div>
   
-  <!-- Main Node Box -->
-  <div class="node-container">
-    <!-- Background Box with title and minimal controls -->
-    <div class="node-background">
-      <div class="node-header">
-        <div class="node-icon" style="color: {nodeStyle.color}">
-          {#if node.type === 'task'}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-          {:else if node.type === 'milestone'}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-            </svg>
-          {:else if node.type === 'resource'}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-            </svg>
-          {:else}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="16" x2="12" y2="12"></line>
-              <line x1="12" y1="8" x2="12.01" y2="8"></line>
-            </svg>
-          {/if}
-        </div>
-
-        {#if isEditingTitle}
-          <input 
-            type="text" 
-            class="title-edit-input" 
-            bind:value={newTitle} 
-            bind:this={titleInput}
-            on:keydown={handleTitleKeydown}
-            on:blur={saveTitle}
-            on:click|stopPropagation={() => {}}
-          />
-        {:else}
-          <span class="node-title">
-            {safeTitle}
-          </span>
-        {/if}
-
-        <div class="node-controls">
-          <button class="node-control-btn comment-btn" on:click|stopPropagation={toggleComment} title="Add Comment">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-          </button>
-          <button class="node-control-btn edit-btn" on:click|stopPropagation={handleEditTitle} title="Edit Title">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-          </button>
-          <button class="node-control-btn delete-btn" on:click|stopPropagation={handleDeleteNode} title="Delete Node">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <!-- Status selector -->
-      <div class="status-container">
-        <button class="node-status status-{node.data.status || 'not-started'}" on:click|stopPropagation={toggleStatusDropdown}>
-          {getStatusDisplay(node.data.status || 'not-started')}
-          <svg class="status-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 12 15 18 9"></polyline>
+  <!-- Node content -->
+  <div class="node-container" style="background: transparent">
+    <!-- Main circular node with icon -->
+    <div class="node-circle" style="background-color: var(--bg-primary)">
+      <div class="node-icon">
+        {#if node.type === 'task' }
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
           </svg>
-        </button>
-        
+        {:else if node.type === 'milestone'}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        {:else if node.type === 'resource'}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+        {:else}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"></circle>
+          </svg>
+        {/if}
+      </div>
+    </div>
+    
+    <!-- Node label and description -->
+    <div class="node-info" >
+      <div class="node-title">{safeTitle}</div>
+      <div class="node-description">{nodeData.shortDescription || getShortDescription(safeDescription)}</div>
+    </div>
+  </div>
+  
+  <!-- Output port (right side) -->
+  <div class="port output-port"
+      data-port-index="0"
+       on:mousedown={(e) => handlePortMouseDown(e, true)}
+       on:mouseup={(e) => handlePortMouseUp(e, true)}>
+    <div class="port-connector"></div>
+  </div>
+  
+  <!-- Context menu (shown on right-click or long press) -->
+  {#if isContextMenuOpen}
+  <div class="context-menu" 
+       transition:fade={{ duration: 150 }}
+       style="transform: translate({contextMenuPosition.x}px, {contextMenuPosition.y}px)">
+      <div class="menu-header">
+        <span>{safeTitle}</span>
+        <button class="close-btn" on:click|stopPropagation={closeContextMenu}>×</button>
+      </div>
+      
+      <div class="menu-section">
+        <div class="menu-item" on:click|stopPropagation={handleEditTitle}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+          <span>Edit Name</span>
+        </div>
+        <div class="menu-item" on:click|stopPropagation={toggleComment}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>Add Comment</span>
+        </div>
+        <div class="menu-item status-selector" on:click|stopPropagation={toggleStatusDropdown}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <span>Status: {getStatusDisplay(node.data.status || 'not-started')}</span>
+        </div>
         {#if isStatusDropdownOpen}
-          <div class="status-dropdown" transition:fade={{ duration: 100 }}>
+          <div class="status-options">
             {#each statusOptions as status}
-              <button 
-                class="status-option status-{status}" 
-                class:selected={node.data.status === status}
-                on:click|stopPropagation={() => updateStatus(status)}
-              >
+              <div class="status-option status-{status}" 
+                   class:selected={node.data.status === status}
+                   on:click|stopPropagation={() => updateStatus(status)}>
                 {getStatusDisplay(status)}
-              </button>
+              </div>
             {/each}
           </div>
         {/if}
       </div>
       
-      <!-- Toggle for expandable panel -->
-      <button class="expand-toggle" on:click|stopPropagation={toggleExpand}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points={isExpanded ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}></polyline>
-        </svg>
-      </button>
-    </div>
-    
-    <!-- Comments display -->
-    {#if node.data.comments && node.data.comments.length > 0}
-      <div class="node-comments">
-        {#each node.data.comments as comment, index}
-          <div class="comment-tag">
-            <span class="comment-text">{comment.text}</span>
-            <button class="remove-comment" on:click|stopPropagation={() => removeComment(index)}>×</button>
+      <div class="menu-section">
+        <div class="section-title">Functions</div>
+        {#each nodeFunctions as func}
+          <div class="menu-item" on:click|stopPropagation={() => executeFunction(func.id)}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              {@html getFunctionIcon(func.icon)}
+            </svg>
+            <span>{func.label}</span>
           </div>
         {/each}
       </div>
-    {/if}
-    
-    <!-- Expandable function box -->
-    {#if isExpanded}
-      <div class="node-expanded" transition:scale={{ duration: 150, start: 0.95, opacity: 0 }}>
-        <!-- Node functions section -->
-        <div class="functions-section">
-          <h3 class="section-title">Functions</h3>
-          <div class="functions-list">
-            {#each nodeFunctions as func}
-              <button 
-                class="function-btn" 
-                on:click|stopPropagation={() => executeFunction(func.id)}
-                title={func.label}
-              >
-                <span class="function-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    {@html getFunctionIcon(func.icon)}
-                  </svg>
-                </span>
-                <span class="function-label">{func.label}</span>
-              </button>
-            {/each}
-          </div>
-        </div>
-        
-        <!-- Input/Output displays -->
-        <div class="io-section">
-          <!-- Inputs display -->
-          <div class="inputs-container">
-            <h4 class="io-title">Inputs</h4>
-            {#if inputConnections.length > 0}
-              {#each inputConnections as connection}
-                <div class="connection-item">
-                  <div class="connection-indicator input-indicator"></div>
-                  <span class="connection-name">
-                    {$siloStore.find(s => s.id === siloId)?.nodes.find(n => n.id === connection.source)?.data?.title || 'Unknown'}
-                  </span>
-                  <button class="remove-connection-btn" on:click|stopPropagation={() => removeConnection(siloId, connection.id)}>×</button>
-                </div>
-              {/each}
-            {:else}
-              <div class="empty-message">No inputs</div>
-            {/if}
-          </div>
-          
-          <!-- Outputs display -->
-          <div class="outputs-container">
-            <h4 class="io-title">Outputs</h4>
-            {#if outputConnections.length > 0}
-              {#each outputConnections as connection}
-                <div class="connection-item">
-                  <div class="connection-indicator output-indicator"></div>
-                  <span class="connection-name">
-                    {$siloStore.find(s => s.id === siloId)?.nodes.find(n => n.id === connection.target)?.data?.title || 'Unknown'}
-                  </span>
-                  <button class="remove-connection-btn" on:click|stopPropagation={() => removeConnection(siloId, connection.id)}>×</button>
-                </div>
-              {/each}
-            {:else}
-              <div class="empty-message">No outputs</div>
-            {/if}
-          </div>
+      
+      <div class="menu-section danger">
+        <div class="menu-item delete" on:click|stopPropagation={handleDeleteNode}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          <span>Delete Node</span>
         </div>
       </div>
-    {/if}
-    
-    <!-- Comment input when adding -->
-    {#if isAddingComment}
-      <div class="comment-input-container" transition:fade={{ duration: 150 }}>
-        <input 
-          type="text" 
-          class="comment-input" 
-          placeholder="Add a comment..." 
-          bind:value={commentText}
-          on:keydown={handleCommentKeydown}
-        />
-        <div class="comment-actions">
-          <button class="comment-btn cancel" on:click|stopPropagation={cancelComment}>Cancel</button>
-          <button class="comment-btn save" on:click|stopPropagation={saveComment}>Add</button>
-        </div>
-      </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
   
-  <!-- Output ports on right side -->
-  <div class="ports-container output-ports">
-    {#each Array(node.data.outputPorts || 1) as _, i (i)}
-      <div 
-        class="port output-port"
-        data-port-index={i}
-        on:mousedown={(e) => handlePortMouseDown(e, true)}
-        on:mouseup={(e) => handlePortMouseUp(e, true)}
-      >
-        <div class="port-connector"></div>
+  <!-- Title editing popup -->
+  {#if isEditingTitle}
+    <div class="edit-popup" transition:fade={{ duration: 150 }}>
+      <input 
+        type="text" 
+        bind:value={newTitle} 
+        bind:this={titleInput}
+        on:keydown={handleTitleKeydown}
+        on:blur={saveTitle}
+      />
+      <div class="edit-actions">
+        <button class="cancel-btn" on:click|stopPropagation={() => isEditingTitle = false}>Cancel</button>
+        <button class="save-btn" on:click|stopPropagation={saveTitle}>Save</button>
       </div>
-    {/each}
-  </div>
+    </div>
+  {/if}
+  
+  <!-- Comment input popup -->
+  {#if isAddingComment}
+    <div class="edit-popup" transition:fade={{ duration: 150 }}>
+      <input 
+        type="text" 
+        placeholder="Add a comment..." 
+        bind:value={commentText}
+        on:keydown={handleCommentKeydown}
+      />
+      <div class="edit-actions">
+        <button class="cancel-btn" on:click|stopPropagation={cancelComment}>Cancel</button>
+        <button class="save-btn" on:click|stopPropagation={saveComment}>Add</button>
+      </div>
+    </div>
+  {/if}
+  
+  <!-- Comments display -->
+  {#if node.data.comments && node.data.comments.length > 0}
+    <div class="node-comments">
+      {#each node.data.comments as comment, index}
+        <div class="comment-tag">
+          <span class="comment-text">{comment.text}</span>
+          <button class="remove-comment" on:click|stopPropagation={() => removeComment(index)}>×</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
-  /* Base node styling */
   .node {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  z-index: 2;
-  cursor: pointer;
-  transition: transform 0.1s ease-out;
-}
-
-.node-container {
-  display: flex;
-  flex-direction: column;
-  width: 280px;
-}
-
-.node-background {
-  padding: 0.75rem;
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  position: relative;
-}
-
-.node-background:hover .node-controls {
-  opacity: 1;
-}
-
-.node.dragging {
-  z-index: 10;
-  opacity: 0.9;
-  filter: drop-shadow(0 0 8px var(--brand-green-light));
-}
-
-.node.expanded, .node.panel-open {
-  z-index: 100; /* Ensure expanded nodes are on top */
-}
-
-.node-card {
-  width: 280px;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-fast);
-  position: relative;
-
-}
-
-
-
-.node-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-/* Node header styling */
-.node-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.node-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-}
-
-.node-title {
-  font-weight: 500;
-  font-size: 0.95rem;
-  color: var(--text-primary);
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.title-edit-input {
-  flex: 1;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.9rem;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.node-description {
-  font-size: 0.85rem;
-  font-weight: 300;
-  margin: 0.5rem 0 0 0;
-  color: var(--text-secondary);
-  line-height: 1.4;
-  max-height: 4.2em;
-
-  display: -webkit-box;
-  line-clamp: 3;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-/* Status container and dropdown */
-.status-container {
-  margin-top: 0.75rem;
-  position: relative;
-}
-
-.node-status {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.4rem;
-  border-radius: 12px;
-  text-transform: capitalize;
-  white-space: nowrap;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  border: none;
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid var(--border-color);
-}
-
-.status-arrow {
-  opacity: 0.6;
-}
-
-.status-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 101;
-  background: var(--bg-primary);
-  border-radius: 6px;
-  box-shadow: none;
-  border: none;
-  min-width: 120px;
-
-  margin-top: 5px;
-}
-
-.status-option {
-  display: flex;
-  width: 100%;
-  text-align: left;
-  padding: 0.3rem 1rem;
-  font-size: 0.6rem;
-  border: none;
-  border-radius: 15px;
-  background: transparent;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  margin-bottom: 0.25rem; /* Added vertical gap */
-}
-
-.status-option:hover {
-  background: var(--neutral-100);
-}
-
-.status-option.selected {
-  font-weight: 600;
-}
-.expand-toggle {
-  position: absolute;
-  bottom: 5px;
-  right: 5px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: transform 0.2s ease;
-}
-
-.node-comments {
-  margin-top: 0.5rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.comment-tag {
-  background: var(--neutral-100);
-  font-size: 0.7rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.comment-text {
-  max-width: 120px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.remove-comment {
-  background: transparent;
-  border: none;
-  padding: 0;
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.remove-comment:hover {
-  background: rgba(0, 0, 0, 0.1);
-}
-
-/* Comment input */
-.comment-input-container {
-  margin-top: 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 0.5rem;
-  background: var(--bg-primary);
-}
-
-.comment-input {
-  width: 100%;
-  border: none;
-  padding: 0.25rem;
-  font-size: 0.85rem;
-  margin-bottom: 0.5rem;
-  background: transparent;
-}
-
-.comment-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.comment-btn {
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  border: none;
-  font-size: 0.7rem;
-  cursor: pointer;
-}
-
-.comment-btn.cancel {
-  background: transparent;
-}
-
-.comment-btn.save {
-  background: var(--brand-green);
-  color: white;
-}
-
-.node-expanded {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-  padding: 0.75rem;
-}
-
-
-.expand-indicator {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  margin-left: 0.25rem;
-}
-
-/* Status colors */
-.status-not-started {
-  background: transparent;
-  color: #e1474d;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-}
-
-.status-not-started::before {
-  content: '';
-  display: inline-block;
-  vertical-align: middle;
-  margin-right: 0.5rem;
-  width: 16px;
-  height: 16px;
-  background: #e1474d;
-  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="m3.517 17l7.058-11.783a1.667 1.667 0 0 1 2.85 0L20.483 17a1.667 1.667 0 0 1-1.425 2.5H4.942A1.666 1.666 0 0 1 3.517 17M12 9a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1m-1 7a1 1 0 0 1 1-1h.008a1 1 0 1 1 0 2H12a1 1 0 0 1-1-1" clip-rule="evenodd"/></svg>') no-repeat center;
-  mask-size: contain;
-  -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="m3.517 17l7.058-11.783a1.667 1.667 0 0 1 2.85 0L20.483 17a1.667 1.667 0 0 1-1.425 2.5H4.942A1.666 1.666 0 0 1 3.517 17M12 9a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1m-1 7a1 1 0 0 1 1-1h.008a1 1 0 1 1 0 2H12a1 1 0 0 1-1-1" clip-rule="evenodd"/></svg>') no-repeat center;
-  -webkit-mask-size: contain;
-}
-
-.status-in-progress {
-  background: transparent;
-  color: #84a2e0;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-}
-
-.status-in-progress::before {
-  content: '';
-  display: inline-block;
-  vertical-align: middle;
-  margin-right: 0.5rem;
-  width: 16px;
-  height: 16px;
-  background: #84a2e0;
-  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20.777a9 9 0 0 1-2.48-.969M14 3.223a9.003 9.003 0 0 1 0 17.554m-9.421-3.684a9 9 0 0 1-1.227-2.592M3.124 10.5c.16-.95.468-1.85.9-2.675l.169-.305m2.714-2.941A9 9 0 0 1 10 3.223"/></svg>') no-repeat center;
-  mask-size: contain;
-  -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20.777a9 9 0 0 1-2.48-.969M14 3.223a9.003 9.003 0 0 1 0 17.554m-9.421-3.684a9 9 0 0 1-1.227-2.592M3.124 10.5c.16-.95.468-1.85.9-2.675l.169-.305m2.714-2.941A9 9 0 0 1 10 3.223"/></svg>') no-repeat center;
-  -webkit-mask-size: contain;
-}
-
-.status-completed {
-  background: transparent;
-  color: #18d8b3;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-}
-
-.status-completed::before {
-  content: '';
-  display: inline-block;
-  vertical-align: middle;
-  margin-right: 0.5rem;
-  width: 16px;
-  height: 16px;
-  background: #18d8b3;
-  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18M1 12C1 5.925 5.925 1 12 1s11 4.925 11 11s-4.925 11-11 11S1 18.075 1 12" /><path d="m17.608 9l-7.726 7.726L6 12.093l1.511-1.31l2.476 3.01l6.207-6.207z" /></g></svg>') no-repeat center;
-  mask-size: contain;
-  -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18M1 12C1 5.925 5.925 1 12 1s11 4.925 11 11s-4.925 11-11 11S1 18.075 1 12" /><path d="m17.608 9l-7.726 7.726L6 12.093l1.511-1.31l2.476 3.01l6.207-6.207z" /></g></svg>') no-repeat center;
-  -webkit-mask-size: contain;
-}
-
-/* Node type styling */
-.task-node .node-card {
-  border-left: 4px solid var(--brand-green);
-}
-
-.milestone-node .node-card {
-  border-left: 4px solid var(--accent-purple);
-}
-
-.decision-node .node-card {
-  border-left: 4px solid var(--accent-blue);
-}
-
-.document-node .node-card {
-  border-left: 4px solid var(--accent-yellow);
-}
-
-.resource-node .node-card {
-  border-left: 4px solid var(--accent-orange, #ff9800);
-  position: relative;
-}
-
-/* Port styling */
-.ports-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  height: 100%;
-}
-
-.input-ports {
-  margin-right: -6px;
-}
-
-.output-ports {
-  margin-left: -6px;
-}
-
-.port {
-  width: 12px;
-  height: 12px;
-  background: var(--bg-secondary);
-  border-radius: 50%;
-  border: 2px solid var(--border-color);
-  cursor: crosshair;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.port:hover {
-  transform: scale(1.2);
-  border-color: var(--brand-green);
-}
-
-.port:hover .port-connector {
-  transform: scale(1.2);
-}
-
-.port-connector {
-  width: 6px;
-  height: 6px;
-  background: var(--brand-green-light);
-  border-radius: 50%;
-}
-
-/* Metadata styling */
-.node-metadata {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border-color);
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-
-.metadata-item {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.3rem;
-}
-
-.metadata-icon {
-  flex-shrink: 0;
-}
-
-.metadata-value {
-  white-space: nowrap;
-
-  text-overflow: ellipsis;
-}
-
-/* Node controls */
-.node-controls {
-  display: flex;
-  gap: 0.3rem;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.node-card:hover .node-controls {
-  opacity: 1;
-}
-
-.node-control-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.node-control-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
-}
-
-.delete-btn:hover {
-  color: var(--error);
-}
-
-/* Node panel (n8n style) */
-.node-panel {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: -20px;
-  width: 280px;
-  background: var(--bg-primary);
-  border-radius: 8px;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-color);
-  z-index: 101;
-
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-}
-
-.panel-title {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--text-primary);
-}
-
-.panel-close-btn {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    padding: 0;
+    user-select: none;
+    z-index: 1;
+
+    transition: transform 0.1s ease;
+    background: transparent;
+    border: transparent;
+
+  }
+  
+  .node:hover {
+
+    z-index: 2;
+  }
+  
+  .node-container {
+    display: flex;
+    align-items: center;
+    height: 60px;
+    border: transparent;
+    padding-left: 8px;
+    
+  }
+  
+  .node-circle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: none;
+    color: var(--text-primary);
+    margin-right: 10px;
+    transition: transform 0.2s ease;
+    border-color: var(--text-primary);
+    border-width: 1px;
+    margin-left:-6px;
+  }
+  
+  .node:hover .node-circle {
+    transform: scale(1.1);
+
+  }
+  
+  .node-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-width: 160px;
+    padding-top: 20px;
+    padding-right: 12px;
+
+  }
+  
+  .node-title {
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+  }
+  
+  .node-description {
+    font-size: 12px;
+    color: transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .port {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
     background: transparent;
+
+    position: relative;
+    cursor: pointer;
+    z-index: 3;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+  }
+  
+  .port:hover {
+    transform: scale(.8);
+    border: 2px solid var(--text-primary);
+  }
+  
+  .input-port {
+    margin-right: -6px;
+  }
+  
+  .output-port {
+    margin-left: -6px;
+  }
+  
+  .port-connector {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: transparent;
+  }
+  
+  .context-menu {
+    position: absolute;
+    transform: scale(0.85);
+    transform-origin: top left;
+    will-change: transform;
+    top: 0;
+    left: 0;
+    width: 150px;
+    background-color: #2a2a2a;
+    border-radius: 4px; 
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+    font-size: 0.9em; 
+    
+  }
+  
+  .menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #444;
+    font-weight: 500;
+  }
+  
+  .close-btn {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 3px;
+    font-size: 16px;
+  }
+  
+  .menu-section {
+    padding: 8px 0;
+    gap: 4px;
+    border-bottom: 1px solid #444;
+  }
+  
+  .menu-section:last-child {
+    border-bottom: none;
+  }
+  
+  .section-title {
+    font-size: 11px;
+    color: #999;
+    padding: 0 8px 4px;
+  }
+  
+  .menu-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px; /* Reduced padding */
+    font-size: 12px; /* Smaller text */
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .menu-item:hover {
+    background-color: #444;
+  }
+  
+  .menu-item svg {
+    width: 12px; /* Smaller icons */
+    height: 12px;
+    margin-right: 6px;
+  }
+  
+  .menu-item.delete {
+    color: #ff5555;
+  }
+  
+  .status-options {
+    margin: 0 10px;
+    background-color: #222;
+    border-radius: 4px;
+  }
+  
+  .status-option {
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 2px 0;
+  }
+  
+  .status-option:hover {
+    background-color: #333;
+  }
+  
+  .status-not-started {
+    border-left: 3px solid #999;
+  }
+  
+  .status-in-progress {
+    border-left: 3px solid #3498db;
+  }
+  
+  .status-completed {
+    border-left: 3px solid #2ecc71;
+  }
+  
+  .edit-popup {
+    position: absolute;
+    top: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #2a2a2a;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    padding: 10px;
+    z-index: 10;
+    width: 200px;
+  }
+  
+  .edit-popup input {
+    width: 100%;
+    padding: 6px 8px;
+    background-color: #333;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  
+  .edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  
+  .edit-actions button {
+    padding: 4px 8px;
+    border: none;
     border-radius: 4px;
     cursor: pointer;
-    color: #666;
   }
-
-  .panel-close-btn:hover {
-    background: rgba(0, 0, 0, 0.05);
-    color: #333;
-  }
-
-.panel-content {
-  padding: 1rem;
-  max-height: 350px;
-  overflow-y: auto;
-}
-
-.panel-section {
-  margin-bottom: 1.25rem;
-}
-
-.section-title {
-  font-size: 0.8rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem 0;
-  color: var(--text-secondary);
-}
-
-.empty-message {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-style: italic;
-  padding: 0.5rem 0;
-}
-
-/* Connection styling in panel */
-.panel-connection {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem;
-  border-radius: 4px;
-  background: var(--neutral-50);
-  margin-bottom: 0.5rem;
-}
-
-.connection-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.input-indicator {
-  background: var(--brand-green);
-}
-
-.output-indicator {
-  background: var(--accent-blue);
-}
-
-.connection-details {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.connection-name {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.remove-connection-btn {
-  border: none;
-  background: transparent;
-  padding: 0;
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-}
-.empty-message {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-style: italic;
-}
-.remove-connection-btn:hover {
-  opacity: 1;
-  color: var(--error);
-}
-
-/* Functions styling */
-.functions-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.function-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.3rem 0.5rem;
-  border-radius: 4px;
-  border: none;
-  background: var(--neutral-100);
-  cursor: pointer;
-  font-size: 0.75rem;
-}
-
-.function-btn:hover {
-  background: var(--neutral-200);
-}
-
-/* Input/Output section */
-.io-section {
-  display: flex;
-  gap: 1rem;
-}
-
-.inputs-container, .outputs-container {
-  flex: 1;
-}
-
-.io-title {
-  font-size: 0.75rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem 0;
-  color: var(--text-secondary);
-}
-
-.connection-item {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.3rem;
-  background: var(--neutral-50);
-  border-radius: 4px;
-  margin-bottom: 0.3rem;
-  font-size: 0.75rem;
-}
-
-.function-icon {
-  margin-right: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.function-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-.functions-section {
-  margin-bottom: 1rem;
-}
-
-/* Panel footer */
-.panel-footer {
-  padding: 0.75rem 1rem;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  justify-content: flex-end;
-}
-
-.panel-btn {
-  padding: 0.5rem 0.75rem;
-  border-radius: 4px;
-  border: none;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.panel-execute-btn {
-  background: var(--brand-green);
-  color: white;
-}
-
-.panel-execute-btn:hover {
-  background: var(--brand-green-dark);
-  transform: translateY(-1px);
-}
-
-/* Expanded panel styling for resource nodes */
-.expanded-panel {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px dashed var(--border-color);
-}
-
-.resource-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-
-.resource-action-btn {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem;
-  border: none;
-  background: var(--neutral-100);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  font-size: 0.85rem;
-  text-align: left;
-  color: var(--text-primary);
-}
-
-.resource-action-btn:hover {
-  background: var(--neutral-200);
-  transform: translateY(-1px);
-}
-
-.action-icon {
-  margin-right: 0.5rem;
-  font-size: 1rem;
-}
-
-.action-label {
-  font-size: 0.8rem;
-}
-
-/* Connection lines */
-.connection-line {
-  position: absolute;
-  pointer-events: none;
-  background: #94a3b8;
-  height: 2px;
-  transform-origin: 0 0;
-  z-index: 1;
   
-  /* Dynamic positioning */
-  left: calc(var(--source-x) * 1px);
-  top: calc(var(--source-y) * 1px);
-  width: calc(var(--distance) * 1px);
-  transform: rotate(calc(var(--angle) * 1deg));
-}
-
-@keyframes connection-pulse {
-  0% { opacity: 0.4; }
-  50% { opacity: 1; }
-  100% { opacity: 0.4; }
-}
-
+  .cancel-btn {
+    background-color: #555;
+    color: #fff;
+  }
+  
+  .save-btn {
+    background-color: var(--brand-green-light, #4ade80);
+    color: #111;
+  }
+  
+  .node-comments {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    max-width: 200px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .comment-tag {
+    background-color: rgba(74, 222, 128, 0.2);
+    border: 1px solid var(--brand-green-light, #4ade80);
+    color: var(--brand-green-light, #4ade80);
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+  }
+  
+  .remove-comment {
+    background: none;
+    border: none;
+    color: var(--brand-green-light, #4ade80);
+    margin-left: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  
+  /* Node type specific styling */
+  .task-node .node-circle {
+    background-color: #3498db;
+  }
+  
+  .milestone-node .node-circle {
+    background-color: #9b59b6;
+  }
+  
+  .resource-node .node-circle {
+    background-color: #2ecc71;
+  }
 </style>

@@ -1,13 +1,14 @@
 <!-- FlowView.svelte -->
 <script lang="ts">
   import { onMount, afterUpdate } from 'svelte';
-  import { siloStore, updateAllConnectionPaths, updateNodePosition } from '$lib/stores/siloStore';
+  import { siloStore, updateAllConnectionPaths, updateNodePosition, createConnection } from '$lib/stores/siloStore';
   import ConnectionLine from './ConnectionLine.svelte';
   import Node from './Node.svelte';
   import type { SiloNode, SiloEdge, Silo } from '$lib/stores/siloStore';
 
   export let siloId: string;
-  
+  import { createEventDispatcher } from 'svelte';
+  const dispatch = createEventDispatcher(); // Add this at the top
   let container: HTMLElement | null = null;
   let viewport = { x: 0, y: 0, zoom: 1 };
   let isPanning = false;
@@ -21,6 +22,7 @@
   let connectionStartIsOutput = false;
   let connectionStartPosition = { x: 0, y: 0 };
   let connectionEndPosition = { x: 0, y: 0 };
+  let tempConnectionPath = '';
   
   $: silo = $siloStore.find(s => s.id === siloId) || {
     id: siloId,
@@ -28,6 +30,11 @@
     edges: [],
     name: 'Loading...'
   };
+
+  function handleCreateConnection(event) {
+    const { source, target } = event.detail;
+    createConnection(source, target, siloId);
+  }
   
   // Optimized pan/zoom handlers
   function handleWheel(e: WheelEvent) {
@@ -55,7 +62,6 @@
     // Update connection paths
     updateAllConnectionPaths(siloId);
   }
-  
 
   function startPanning(e: MouseEvent) {
     // Only start panning on middle-mouse or if not over a node (e.target check)
@@ -68,25 +74,25 @@
   }
 
   function doPanning(e: MouseEvent) {
-    if (!isPanning) {
-      // If drawing a connection, update end position
-      if (isDrawingConnection) {
-        const rect = container!.getBoundingClientRect();
-        connectionEndPosition = {
-          x: (e.clientX - rect.left - viewport.x) / viewport.zoom,
-          y: (e.clientY - rect.top - viewport.y) / viewport.zoom
-        };
-      }
-      return;
+  if (!isPanning) {
+    // If drawing a connection, update end position
+    if (isDrawingConnection && container) {
+      const rect = container.getBoundingClientRect();
+      connectionEndPosition = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
     }
-    
-    // Update viewport for panning
-    viewport = {
-      ...viewport,
-      x: e.clientX - startPan.x,
-      y: e.clientY - startPan.y
-    };
+    return;
   }
+  
+  // Update viewport for panning
+  viewport = {
+    ...viewport,
+    x: e.clientX - startPan.x,
+    y: e.clientY - startPan.y
+  };
+}
 
   function endPanning() {
     isPanning = false;
@@ -126,38 +132,53 @@
 
   // Connection drawing handlers
   function handleConnectionStart(event: CustomEvent) {
-    const { nodeId, position, isOutput } = event.detail;
-    isDrawingConnection = true;
-    connectionStartNode = nodeId;
-    connectionStartIsOutput = isOutput;
-    connectionStartPosition = {
-      x: (position.x - viewport.x) / viewport.zoom,
-      y: (position.y - viewport.y) / viewport.zoom
-    };
-    connectionEndPosition = { ...connectionStartPosition };
-  }
+  const { nodeId, position, isOutput } = event.detail;
+  isDrawingConnection = true;
+  connectionStartNode = nodeId;
+  connectionStartIsOutput = isOutput;
+  
+  // Store the actual position (not scaled by viewport)
+  connectionStartPosition = {
+    x: position.x,
+    y: position.y
+  };
+  connectionEndPosition = { ...connectionStartPosition };
+}
 
-  function handleConnectionEnd(event: CustomEvent) {
-    if (!isDrawingConnection) return;
+function handleConnectionEnd(event: CustomEvent) {
+  if (!isDrawingConnection || !connectionStartNode) return;
+  
+  const { nodeId, isOutput } = event.detail;
+  
+  // Only create connection if source and target are different nodes
+  // and source is output and target is input (or vice versa)
+  if (nodeId && connectionStartNode !== nodeId) {
+    let source, target;
     
-    const { nodeId, isOutput } = event.detail;
-    
-    // Only create connection if source is output and target is input
-    if (connectionStartNode && 
-        connectionStartNode !== nodeId && 
-        connectionStartIsOutput !== isOutput) {
-      
-      // Create new connection
-      const source = connectionStartIsOutput ? connectionStartNode : nodeId;
-      const target = connectionStartIsOutput ? nodeId : connectionStartNode;
-      
-      dispatch('createconnection', { source, target });
+    // Determine which node is source and which is target
+    if (connectionStartIsOutput && !isOutput) {
+      // Starting from output, ending at input (normal case)
+      source = connectionStartNode;
+      target = nodeId;
+    } else if (!connectionStartIsOutput && isOutput) {
+      // Starting from input, ending at output (reverse case)
+      source = nodeId;
+      target = connectionStartNode;
+    } else {
+      // Can't connect output to output or input to input
+      isDrawingConnection = false;
+      connectionStartNode = null;
+      return;
     }
     
-    // Reset connection drawing state
-    isDrawingConnection = false;
-    connectionStartNode = null;
+    // Create the actual connection
+    dispatch('createconnection', { source, target });
   }
+  
+  // Reset connection drawing state
+  isDrawingConnection = false;
+  connectionStartNode = null;
+}
 
   onMount(() => {
     // Initial setup
@@ -184,14 +205,10 @@
     {#if isDrawingConnection}
       <path 
         class="connection-drawing"
-        d={`M ${connectionStartPosition.x * viewport.zoom + viewport.x} 
-              ${connectionStartPosition.y * viewport.zoom + viewport.y} 
-            C ${connectionStartPosition.x * viewport.zoom + viewport.x + 50} 
-              ${connectionStartPosition.y * viewport.zoom + viewport.y},
-              ${connectionEndPosition.x * viewport.zoom + viewport.x - 50} 
-              ${connectionEndPosition.y * viewport.zoom + viewport.y},
-              ${connectionEndPosition.x * viewport.zoom + viewport.x} 
-              ${connectionEndPosition.y * viewport.zoom + viewport.y}`}
+        d={`M ${connectionStartPosition.x} ${connectionStartPosition.y} 
+            C ${connectionStartPosition.x + 100} ${connectionStartPosition.y},
+            ${connectionEndPosition.x - 100} ${connectionEndPosition.y},
+            ${connectionEndPosition.x} ${connectionEndPosition.y}`}
         stroke="#888" 
         stroke-width="2" 
         stroke-dasharray="5,5"
@@ -213,6 +230,7 @@
         on:dragend={handleNodeDragEnd}
         on:connectionstart={handleConnectionStart}
         on:connectionend={handleConnectionEnd}
+        on:createconnection={handleCreateConnection}
       />
     {/each}
   </div>
@@ -225,6 +243,7 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg-primary)
+    
   }
 
   .connections-layer {

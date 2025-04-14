@@ -6,6 +6,8 @@
 
   	import { browser } from '$app/environment';
   	import { onMount } from 'svelte';
+	import { supabase } from '$lib/supabaseClient';
+  	import { user } from '$lib/stores/userStore';
 
   if (browser) {
     onMount(() => {
@@ -22,6 +24,16 @@
   function toggleTheme() {
     theme.update(t => t === 'dark' ? 'light' : 'dark');
   }
+
+  onMount(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      user.set(data.session?.user || null);
+    });
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+      user.set(session?.user || null);
+    });
+  });
 </script>
 
 <div class="flex min-h-screen">

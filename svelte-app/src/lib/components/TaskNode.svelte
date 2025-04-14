@@ -313,6 +313,6 @@
   /* Focus outline for accessibility */
   .node:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.5);
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.5);
   }
 </style>

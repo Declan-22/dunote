@@ -5,9 +5,35 @@
     import { user } from '$lib/stores/userStore';
     import { sidebarCollapsed } from '$lib/stores/uiStore';
     import { fly } from 'svelte/transition';
+    import { noteStore, } from '$lib/stores/noteStore';
+    import type { Node } from '$lib/types/nodes';
+    import ErrorBoundary from './ErrorBoundary.svelte';
+
   
+    onDestroy(() => {
+    if (editorInstance) {
+      editorInstance.destroy();
+      editorInstance = null;
+    }
+    // Add this cleanup
+    // Define handleClickOutside if needed
+    function handleClickOutside(event: MouseEvent) {
+        // Add logic to handle click outside
+    }
+
+    // Define handleTitleKeydown if needed
+    function handleTitleKeydown(event: KeyboardEvent) {
+        // Add logic to handle title keydown
+    }
+
+    window.removeEventListener('click', handleClickOutside);
+    window.removeEventListener('keydown', handleTitleKeydown);
+  });
+
+    let userId = $user?.id;
     // Note data structure interface
     interface Note {
+
       id: string;
       title: string;
       content: string;
@@ -16,6 +42,8 @@
       updated_at: string;
       tags: string[];
       user_id?: string;
+      ts_vector?: string;
+      nodes?: Partial<Node>[];
     }
   
     // Editor state
@@ -30,7 +58,22 @@
     let showAttachModal = false;
     let availableNodes: any[] = [];
     let newTagInput = '';
+    let searchTimeout: NodeJS.Timeout;
   
+  async function handleSearchInput(e: Event) {
+    const query = (e.target as HTMLInputElement).value;
+    searchQuery = query;
+    
+    // Debounce search requests
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+      if (query.length > 2) {
+        notes = await noteStore.searchNotes(query);
+      } else {
+        await loadNotes();
+      }
+    }, 300);
+  }
     // Load notes when component mounts and user is available
     onMount(async () => {
       if ($user?.id) {
@@ -47,47 +90,36 @@
     });
   
     // Filter notes based on search query
-    $: {
-      if (searchQuery) {
-        filteredNotes = notes.filter((note) =>
-          note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          note.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          note.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
-      } else {
-        filteredNotes = [...notes];
-      }
-    }
+  $: filteredNotes = searchQuery ? notes.filter(note => 
+      (note.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (note.content?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (note.tags || []).some(tag => 
+        tag.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    ) : notes;
   
     // Load notes from database
     async function loadNotes() {
-      try {
-        const { data, error } = await supabase
-          .from('notes')
-          .select('*')
-          .eq('user_id', $user?.id || '')
-          .order('updated_at', { ascending: false });
-        if (error) throw error;
-        notes = data || [];
-        filteredNotes = [...notes];
-      } catch (err) {
-        console.error('Error loading notes:', err);
+    try {
+      if ($user?.id) {
+        notes = await noteStore.loadNotes();
       }
+    } catch (err) {
+      console.error('Failed to load notes:', err);
+      notes = []; // Reset to empty array
     }
+    filteredNotes = [...notes];
+  }
   
     // Load available nodes for attachment
     async function loadAvailableNodes() {
-      try {
-        const { data, error } = await supabase
-          .from('nodes')
-          .select('id, title, type')
-          .eq('user_id', $user?.id || '');
-        if (error) throw error;
-        availableNodes = data || [];
-      } catch (err) {
-        console.error('Error loading nodes:', err);
-      }
+    try {
+      // Replace with your actual node loading logic
+      availableNodes = []; 
+    } catch (err) {
+      console.error('Error loading nodes:', err);
     }
+  }
   
     // Initialize the rich text editor
     function initEditor() {
@@ -109,18 +141,15 @@
     }
   
     // Create a new note
-    function createNewNote() {
-      const newNote: Note = {
-        id: crypto.randomUUID(),
-        title: 'Untitled Note',
-        content: '',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        tags: [],
-      };
+    async function createNewNote() {
+    try {
+      const newNote = await noteStore.createNewNote();
       currentNote = newNote;
       isCreatingNew = true;
+    } catch (err) {
+      console.error('Create failed:', err);
     }
+  }
   
     // Select a note to edit
     function selectNote(note: Note) {
@@ -138,45 +167,21 @@
   
     // Save the current note
     async function saveNote() {
-      if (!currentNote) return;
-      isSaving = true;
-      currentNote.updated_at = new Date().toISOString();
-      try {
-        // Get the latest content from the editor
-        if (editorInstance) {
-          currentNote.content = editorInstance.getContents();
-        }
-        let operation;
-        if (isCreatingNew) {
-          // Insert new note
-          operation = supabase
-            .from('notes')
-            .insert([{ ...currentNote, user_id: $user?.id || '' }]);
-        } else {
-          // Update existing note
-          operation = supabase
-            .from('notes')
-            .update({
-              title: currentNote.title,
-              content: currentNote.content,
-              tags: currentNote.tags,
-              node_id: currentNote.node_id,
-              updated_at: currentNote.updated_at,
-            })
-            .eq('id', currentNote.id);
-        }
-        const { error } = await operation;
-        if (error) throw error;
-        // Refresh notes list
-        await loadNotes();
-        // Update flags
-        isCreatingNew = false;
-      } catch (err) {
-        console.error('Error saving note:', err);
-      } finally {
-        isSaving = false;
+    if (!currentNote) return;
+    
+    try {
+      if (editorInstance) {
+        currentNote.content = editorInstance.getContents();
       }
+      
+      const savedNote = await noteStore.saveNote(currentNote);
+      currentNote = savedNote;
+      await loadNotes();
+      isCreatingNew = false;
+    } catch (err) {
+      console.error('Save failed:', err);
     }
+  }
   
     // Delete the current note
     async function deleteNote() {
@@ -203,11 +208,10 @@
   
     // Attach current note to a node
     async function attachToNode(nodeId: string) {
-      if (!currentNote) return;
-      currentNote.node_id = nodeId;
-      await saveNote();
-      showAttachModal = false;
-    }
+    if (!currentNote?.id) return;
+    await noteStore.attachNode(currentNote.id, nodeId);
+    showAttachModal = false;
+  }
   
     // Add a tag to the current note
     function addTag(tag: string) {
@@ -255,6 +259,9 @@
       // This would open a drawing interface
       alert('Drawing tool would be implemented here');
     }
+
+    $: console.log('Current notes:', notes);
+    $: console.log('Filtered notes:', filteredNotes);
   </script>
   
   <!-- Notes sidebar -->
@@ -264,11 +271,12 @@
       <!-- Search bar -->
       <div class="relative">
         <input
-          type="text"
-          bind:value={searchQuery}
-          placeholder="Search notes..."
-          class="w-full py-2 px-3 pr-8 bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-md"
-        />
+        type="text"
+        placeholder="Search notes..."
+        class="w-full py-2 px-3 pr-8 bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-md"
+        on:input={handleSearchInput}
+        bind:value={searchQuery}
+      />
         <svg
           class="absolute right-3 top-2.5 w-5 h-5 text-[var(--text-secondary)]"
           fill="none"
@@ -337,7 +345,7 @@
       {/if}
     </div>
   </div>
-  
+<ErrorBoundary> 
   <!-- Main content area -->
   <div class="flex-1 flex flex-col h-full overflow-hidden">
     {#if currentNote}
@@ -568,24 +576,22 @@
           {#if availableNodes.length === 0}
             <p class="text-center text-[var(--text-secondary)] py-4">No nodes available</p>
           {:else}
-            {#each availableNodes as node}
-              <button
-                on:click={() => attachToNode(node.id)}
-                class="w-full text-left p-3 rounded-md hover:bg-[var(--bg-primary)] transition-colors flex items-center {currentNote?.node_id === node.id ? 'bg-[var(--brand-green-light)] text-white' : ''}"
-              >
-                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m0-10V5a2 2 0 00-2-2h-2a2 2 0 00-2 2v2m0 10V5a2 2 0 00-2-2h-2a2 2 0 00-2 2v2z"
-                  />
-                </svg>
-              </button>
-            {/each}
+          {#each availableNodes as node (node.id)}
+            <button
+              on:click={() => attachToNode(node.id)}
+              class="w-full text-left p-3 rounded-md hover:bg-[var(--bg-primary)] transition-colors flex items-center"
+              aria-label={`Attach to node ${node.title}`}
+            >
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <!-- Your icon -->
+              </svg>
+              {node.title}
+            </button>
+          {/each}
           {/if}
         </div>
       </div>
     </div>
   {/if}
+</ErrorBoundary>
 

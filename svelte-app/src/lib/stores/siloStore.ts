@@ -41,6 +41,7 @@ export interface SiloNode {
     isValid: boolean;
     missingConnections: NodeType[];
   };
+  width?: number; // Add width property
 }
 
 
@@ -820,70 +821,102 @@ function generateOutputContent(inputs: any[]): string {
 }
 
 // Create a connection between nodes
-export function createConnection(sourceId: string, targetId: string, siloId: string, sourcePortIndex = 0, targetPortIndex = 0) {
+export function createConnection(
+  sourceId: string,
+  targetId: string,
+  siloId: string,
+  sourcePortIndex = 0,
+  targetPortIndex = 0
+) {
   siloStore.update(store => {
     const silo = store.find(s => s.id === siloId);
     if (!silo) return store;
-    
+
     const sourceNode = silo.nodes.find(n => n.id === sourceId);
     const targetNode = silo.nodes.find(n => n.id === targetId);
+
+    if (!sourceNode || !targetNode || sourceId === targetId) return store;
+
+    // Default port positions if not defined
+    const defaultOutputPort = { x: sourceNode.width || 150, y: 30 };
+    const defaultInputPort = { x: 0, y: 30 };
+
+    // Get actual port positions from the nodes
+    const sourcePort = sourceNode.portPositions?.output || defaultOutputPort;
+    const targetPort = targetNode.portPositions?.input || defaultInputPort;
+
+    // Calculate absolute positions
+    const sourceX = sourceNode.position.x + sourcePort.x;
+    const sourceY = sourceNode.position.y + sourcePort.y;
+    const targetX = targetNode.position.x + targetPort.x;
+    const targetY = targetNode.position.y + targetPort.y;
+
+    // Calculate distance for curve
+    const dx = targetX - sourceX;
+    const dy = targetY - sourceY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
     
-    if (!sourceNode || !targetNode) return store;
-    
-    // Don't connect if it's the same node
-    if (sourceId === targetId) return store;
-    
-    // Don't connect if source doesn't have output or target doesn't have input
-    if (!shouldHaveOutputPort(sourceNode.type) || !shouldHaveInputPort(targetNode.type)) {
-      return store;
-    }
-    
-    // Create the sourceHandle and targetHandle strings
-    const sourceHandle = `output-${sourcePortIndex}`;
-    const targetHandle = `input-${targetPortIndex}`;
-    
-    // Check if this exact connection already exists
-    const connectionExists = silo.edges.some(
-      e => e.source === sourceId && e.target === targetId && 
-           e.sourceHandle === sourceHandle && 
-           e.targetHandle === targetHandle
-    );
-    
-    if (connectionExists) return store;
-    
-    // Calculate the path for this connection
-    const pathData = calculateConnectionPath(
-      sourceNode, 
-      targetNode, 
-      sourceHandle, 
-      targetHandle
-    );
-    
-    // Create the edge with port specifics and path data, using a type assertion
+    // Dynamic control point offset based on distance
+    const offset = Math.min(Math.max(distance / 3, 50), 150);
+
+    const pathData = {
+      sourceX,
+      sourceY,
+      targetX,
+      targetY,
+      controlPoint1X: sourceX + offset,
+      controlPoint1Y: sourceY,
+      controlPoint2X: targetX - offset,
+      controlPoint2Y: targetY
+    };
+
     const newEdge: SiloEdge = {
       id: crypto.randomUUID(),
       source: sourceId,
-      sourceHandle,
       target: targetId,
-      targetHandle,
       siloId,
-      animated: false,
-      pathType: 'bezier' as const,
-      pathData
+      pathType: 'bezier',
+      pathData,
+      animated: false
     };
-    
-    return store.map(s => {
-      if (s.id !== siloId) return s;
-      
-      return {
-        ...s,
-        edges: [...s.edges, newEdge]
-      };
-    });
+
+    return store.map(s => s.id === siloId ? {
+      ...s,
+      edges: [...s.edges, newEdge]
+    } : s);
   });
-  
-  // Validate nodes after connection
-  validateSiloNodes(siloId);
+}
+
+export function createTemporaryConnection(
+  siloId: string,
+  sourceNode: SiloNode,
+  currentMousePos: Position
+) {
+  const sourcePort = sourceNode.portPositions?.output || { x: 150, y: 30 };
+  const sourceX = sourceNode.position.x + sourcePort.x;
+  const sourceY = sourceNode.position.y + sourcePort.y;
+
+  const tempEdge: SiloEdge = {
+    id: 'temp',
+    source: 'temp',
+    target: 'temp',
+    siloId,
+    pathData: {
+      sourceX,
+      sourceY,
+      targetX: currentMousePos.x,
+      targetY: currentMousePos.y,
+      controlPoint1X: sourceX + 100,
+      controlPoint1Y: sourceY,
+      controlPoint2X: currentMousePos.x - 100,
+      controlPoint2Y: currentMousePos.y
+    }
+  };
+
+  siloStore.update(store => store.map(s => s.id === siloId ? {
+    ...s,
+    edges: [...s.edges.filter(e => e.id !== 'temp'), tempEdge]
+  } : s));
 }
 
 export function updateConnectionPath(siloId: string, edgeId: string) {
@@ -1028,6 +1061,20 @@ export function validateSiloNodes(siloId: string) {
       };
     });
   });
+}
+
+function validateConnection(source: SiloNode, target: SiloNode) {
+  // Prevent connections to self
+  if (source.id === target.id) return false;
+  
+  // Type validation - modify these rules as needed
+  const validConnections: Partial<Record<NodeType, NodeType[]>> = {
+    'resource': ['task', 'milestone'],
+    'task': ['milestone', 'task'],
+    'milestone': ['task']
+  };
+
+  return validConnections[source.type]?.includes(target.type) ?? true;
 }
 
 // Update silo view state (pan/zoom)
