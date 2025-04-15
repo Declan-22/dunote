@@ -3,7 +3,7 @@
 	let { children } = $props();
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import { theme } from '$lib/stores/themeStore';
-
+	import { siloStore } from '$lib/stores/siloStore';
   	import { browser } from '$app/environment';
   	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
@@ -20,6 +20,31 @@
       });
     });
   }
+
+  $effect(() => {
+    if ($user) {
+      supabase
+        .from('silos')
+        .select('*')
+        .eq('user_id', $user.id)
+        .then(({ data }) => {
+          if (data?.length === 0) {
+            supabase
+              .from('silos')
+              .insert({
+                name: 'Default Silo',
+                user_id: $user.id
+              })
+              .select()
+              .single()
+              .then(({ data }) => {
+                if (data) siloStore.update((store: any[]) => [...store, data]);
+              });
+          }
+        });
+    }
+  });
+
 
   function toggleTheme() {
     theme.update(t => t === 'dark' ? 'light' : 'dark');

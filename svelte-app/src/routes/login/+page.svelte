@@ -3,7 +3,7 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  
+  import { goto } from '$app/navigation';
   let email = '';
   let password = '';
   let error = '';
@@ -25,9 +25,12 @@
       
       if (authError) throw authError;
       
-      window.location.href = $page.url.searchParams.get('returnUrl') || '/';
+      // Use SvelteKit's navigation instead of window.location
+      const redirectUrl = $page.url.searchParams.get('returnUrl') || '/';
+      await goto(redirectUrl);
     } catch (e) {
-      error = e instanceof Error ? e.message : 'An unknown error occurred';
+      error = e instanceof Error ? e.message : 'Login failed';
+      console.error('Login error:', e);
     } finally {
       loading = false;
     }

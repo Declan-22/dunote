@@ -82,9 +82,14 @@
 
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+
 /* Global Styles */
 body {
-  
+  overscroll-behavior: contain;
   font-family: 'Manrope', sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);

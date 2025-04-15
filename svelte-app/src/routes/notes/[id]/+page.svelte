@@ -157,18 +157,20 @@
 
   
   async function loadAvailableNodes() {
-    try {
-      const { data, error } = await supabase
-        .from('nodes')
-        .select('id, title')
-        .order('title');
-        
-      if (error) throw error;
-      availableNodes = data;
-    } catch (error) {
-      console.error('Error loading nodes:', error);
-    }
+  try {
+    const { data, error } = await supabase
+      .from('nodes')
+      .select('id, title')
+      .eq('user_id', $user?.id)  // Add this filter
+      .order('title');
+      
+    if (error) throw error;
+    availableNodes = data;
+    console.log('Available nodes:', availableNodes);  // Debug log
+  } catch (error) {
+    console.error('Error loading nodes:', error);
   }
+}
   
     async function loadNote(id: string) {
       try {
@@ -322,16 +324,38 @@
     showTagModal = !showTagModal;
   }
   
-  function attachNode(nodeId: string) {
-    const node = availableNodes.find(n => n.id === nodeId);
-    if (node && currentNote) {
-      if (!currentNote.attachedNodes.some(n => n.id === nodeId)) {
-        currentNote.attachedNodes = [...currentNote.attachedNodes, node];
-        autoSave();
-      }
-      showAttachModal = false;
+  async function attachNode(nodeId: string) {
+  try {
+    // First ensure note exists in DB
+    if (!currentNote.id) {
+      const { data: newNote } = await supabase
+        .from('notes')
+        .insert(currentNote)
+        .select()
+        .single();
+      currentNote.id = newNote.id;
     }
+
+    // Create relationship in note_nodes
+    const { error } = await supabase
+      .from('note_nodes')
+      .insert({
+        note_id: currentNote.id,
+        node_id: nodeId
+      });
+
+    if (!error) {
+      // Update local state
+      const node = availableNodes.find(n => n.id === nodeId);
+      if (node) {
+        currentNote.attachedNodes = [...currentNote.attachedNodes, node];
+      }
+    }
+  } catch (err) {
+    console.error('Attachment failed:', err);
   }
+  showAttachModal = false;
+}
 
   function detachNode(nodeId: string) {
     currentNote.attachedNodes = currentNote.attachedNodes.filter(node => node.id !== nodeId);
@@ -415,29 +439,12 @@
       <span class="loading-char" style="--i: {index}">{char}</span>
     {/each}
   </div>
-{:else if note}
+{:else if currentNote}
 <div class="notes-app h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
   <!-- Status bar -->
   <div class="bg-[var(--bg-secondary)] py-2 px-4 flex justify-between items-center border-b border-[var(--border-color)] text-xs">
     <div class="flex items-center space-x-2">
-      {#if isSearching}
-        <div class="search-input flex items-center">
-          <input 
-            type="text" 
-            bind:value={searchTerm} 
-            placeholder="Search notes..." 
-            class="bg-gray-100 dark:bg-gray-700 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
-            transition:slide={{ duration: 200 }}
-          />
-          <button on:click={() => isSearching = false} class="ml-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-            <X size={14} />
-          </button>
-        </div>
-      {:else}
-        <button on:click={() => isSearching = true} class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-          Search
-        </button>
-      {/if}
+
     </div>
     <div class="flex items-center space-x-3">
       {#if isSaving}
@@ -463,8 +470,9 @@
   </div>
 
   <!-- Main content area -->
-  <div class="flex-1 overflow-y-auto scroll-smooth p-8 max-w-3xl mx-auto w-full">
-
+<div class="flex-1 flex flex-col overflow-hidden">
+    <!-- Scroll container with padding -->
+  <div class="flex-1 overflow-y-auto scroll-smooth p-8  pb-20">
     
     <!-- Title input -->
     <div class="mb-6 mt-9">
@@ -516,6 +524,7 @@
         class="w-full text-1xl font-regular bg-transparent border-none placeholder:text-[var(--text-secondary)] placeholder:opacity-50 focus:outline-none focus:ring-0"
       /> 
     </div>
+  </div>
   </div>
   
   <!-- Floating Toolbar -->
@@ -728,12 +737,12 @@
   <!-- Attach Modal -->
   {#if showAttachModal}
     <div 
-      class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50"
+      class="fixed inset-0  bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50"
       transition:fade={{ duration: 150 }}
       on:click|self={() => showAttachModal = false}
     >
       <div 
-        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6"
+        class="bg-[var(--bg-secondary)] rounded-lg shadow-xl max-w-md w-full p-6"
         transition:fly={{ y: 20, duration: 200 }}
       >
         <div class="flex justify-between items-center mb-4">
@@ -757,11 +766,9 @@
               {#each availableNodes as node}
                 <button 
                   on:click={() => attachNode(node.id)}
-                  class="w-full text-left px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                  class:bg-blue-50={currentNote.attachedNodes?.some(n => n.id === node.id)}
-                  class:dark:bg-blue-900={currentNote.attachedNodes?.some(n => n.id === node.id)}
-                  class:text-blue-700={currentNote.attachedNodes?.some(n => n.id === node.id)}
-                  class:dark:text-blue-300={currentNote.attachedNodes?.some(n => n.id === node.id)}
+                  class="w-full text-left px-3 py-2 rounded-md hover:bg-[var(--bg-primary)] transition-all duration-200"
+                  class:bg-[var(--brand-green-light)]={currentNote.attachedNodes?.some(n => n.id === node.id)}
+                  
                 >
                   {node.title}
                 </button>
@@ -773,7 +780,7 @@
         <div class="flex justify-end">
           <button 
             on:click={() => showAttachModal = false}
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            class="px-4 py-2 bg-[var(--brand-green)] text-white rounded-md hover:bg-[var(--brand-green-dark)] hover:scale-105 transition-all: duration-200 "
           >
             Done
           </button>
@@ -906,6 +913,30 @@
       transform: translateY(-15px);
     }
   }
+
+      ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+      transition: all 0.3s;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      transition: all 0.3s;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+      transition: all 0.3s;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--brand-green);
+      transition: all 0.3s;
+    }
+    
 
   #editor p.is-editor-empty:first-child::before {
     color: var(--text-secondary);

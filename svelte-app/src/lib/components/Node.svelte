@@ -15,14 +15,17 @@
   $: screenY = node.position.y * viewport.zoom + viewport.y;
   import { noteStore } from '$lib/stores/noteStore';
   import { user } from '$lib/stores/userStore';
-
+  import { supabase } from '$lib/supabaseClient';
+  
   export let node: SiloNode;
+  let editedTitle = node.data.title;
+  let isEditingTitle = false;
   export let siloId: string;
   export let scale: number = 1;
   const dispatch = createEventDispatcher();
   let isDragging = false;
   let isExpanded = false;
-  let isEditingTitle = false;
+
   let isNodePanelOpen = false;
   let startPos = { x: 0, y: 0 };
   let startNodePos = { x: 0, y: 0 };
@@ -462,16 +465,19 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   }
   
   // Save the edited title
-  function saveTitle() {
-    if (newTitle.trim()) {
-      dispatch('updatenode', {
-        nodeId: node.id,
-        updates: {
-          data: {
-            title: newTitle.trim()
-          }
-        }
-      });
+  async function saveTitle() {
+    const { error } = await supabase
+      .from('nodes')
+      .update({ title: editedTitle })
+      .eq('id', node.id);
+
+    if (!error) {
+      siloStore.update(store => store.map(silo => ({
+        ...silo,
+        nodes: silo.nodes.map(n => 
+          n.id === node.id ? { ...n, data: { ...n.data, title: editedTitle } } : n
+        )
+      })));
     }
     isEditingTitle = false;
   }
@@ -772,7 +778,8 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
     
     <!-- Node label and description -->
     <div class="node-info" >
-      <div class="node-title">{safeTitle}</div>
+      <div class="node-title">
+        {safeTitle}</div>
       <div class="node-description">{nodeData.shortDescription || getShortDescription(safeDescription)}</div>
     </div>
   </div>

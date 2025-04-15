@@ -1,13 +1,15 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { siloStore, updateNodePosition, addNode, getNodePosition, renameSilo, deleteSilo, createConnection, type Position } from '$lib/stores/siloStore';
+  import { siloStore, updateNodePosition, getNodePosition, renameSilo, deleteSilo, createConnection, type Position } from '$lib/stores/siloStore';
   import NodeLibrary from '$lib/components/NodeLibrary.svelte';
   import TriggerNode from '$lib/components/TriggerNode.svelte';
   import FlowView from '$lib/components/FlowView.svelte';
   import TaskDump from '$lib/components/TaskDump.svelte';
   import type { SiloNode } from '$lib/stores/siloStore';
   import type { NodeType } from '$lib/types/nodes';
+  import { supabase } from '$lib/supabaseClient'; // Import your Supabase client
+  import { user } from '$lib/stores/userStore';
 
   // State variables
   let showLibrary = false;
@@ -15,7 +17,7 @@
   let taskEditorText = '';
   let activeNode: SiloNode | null = null;
   let renamingSilo = false;
-  let newSiloName = 'My New Trip';
+  let newSiloName = 'My NFew Trip';
   let connectionStart: { nodeId: string, position: Position, isOutput: boolean } | null = null;
   let tempConnectionPath = '';
   let tempConnectionClass = '';
@@ -31,6 +33,39 @@
       if (!silo) return;
       addNode(silo.id, type, { x: 100, y: 100 });
       showLibrary = false;
+  }
+
+  async function addNode(siloId: string, type: string, position: Position) {
+    try {
+      if (!$user) throw new Error("User not logged in");
+      
+      const { data, error } = await supabase
+        .from('nodes')
+        .insert({
+        title: `Untitled ${type.charAt(0).toUpperCase() + type.slice(1)} Node`,
+          type: type,
+          position: position,
+          silo_id: siloId,
+          user_id: $user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      siloStore.update(store => 
+        store.map(silo => 
+          silo.id === siloId 
+            ? { ...silo, nodes: [...silo.nodes, data] } 
+            : silo
+        )
+      );
+      
+      return data;
+    } catch (err) {
+      console.error("Node creation failed:", err);
+      return null;
+    }
   }
 
   function handleFlowStart() {
@@ -523,12 +558,9 @@
   }
   
   .loading-spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid rgba(255, 255, 255, 0.1);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 1rem;
+    display: inline-block;
+    animation: wave 1.2s ease-in-out infinite;
+    animation-delay: calc(0.1s * var(--i));
   }
   
   @keyframes spin {

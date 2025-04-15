@@ -8,6 +8,8 @@
   import type { SiloNode } from '$lib/stores/siloStore';
   import type { NodeType } from '$lib/types/nodes';
   import { goto } from '$app/navigation';
+  import { supabase } from '$lib/supabaseClient'; // Import your Supabase client
+  import { user } from '$lib/stores/userStore';
 
   // State variables
   let showLibrary = false;
@@ -31,16 +33,32 @@
   }
 
   // Create a new silo
-  function createNewSilo() {
-    const siloId = crypto.randomUUID();
-    siloStore.update(store => [...store, {
-      id: siloId,
-      name: newSiloName,
-      nodes: [],
-      edges: [],
-      isLoading: false
-    }]);
-    goto(`/silos/${siloId}`);
+  async function createNewSilo() {
+    try {
+      if (!$user) throw new Error("User not logged in");
+      
+      const { data, error } = await supabase
+        .from('silos')
+        .insert({
+          name: newSiloName,
+          user_id: $user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      siloStore.update(store => [...store, {
+        ...data,
+        nodes: [],
+        edges: [],
+        isLoading: false
+      }]);
+      
+      goto(`/silos/${data.id}`);
+    } catch (err) {
+      processingError = err instanceof Error ? err.message : "Silo creation failed";
+    }
   }
 
   // Delete a silo

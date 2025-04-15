@@ -7,5 +7,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
   };
 };
 
+export const prerender = true;
+export const trailingSlash = 'always';
+
 
 
