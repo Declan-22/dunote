@@ -374,11 +374,13 @@ function handleTouchEnd(e: TouchEvent) {
   const rect = portElement.getBoundingClientRect();
   const portIndex = parseInt(portElement.dataset.portIndex || '0');
   
-  // Calculate position in screen coordinates
+  // Calculate position in screen coordinates (not scaled by viewport)
   const position = {
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2
   };
+  
+  console.log("Port mouse down:", node.id, position, isOutput);
   
   dispatch('connectionstart', { 
     nodeId: node.id,
@@ -388,16 +390,20 @@ function handleTouchEnd(e: TouchEvent) {
   });
 }
 
-  function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
-    const portElement = e.currentTarget as HTMLElement;
-    const portIndex = parseInt(portElement.dataset.portIndex || '0');
-    
-    dispatch('connectionend', {
-      nodeId: node.id,
-      isOutput,
-      portIndex
-    });
-  }
+function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
+  e.stopPropagation();
+  
+  const portElement = e.currentTarget as HTMLElement;
+  const portIndex = parseInt(portElement.dataset.portIndex || '0');
+  
+  console.log("Port mouse up:", node.id, isOutput);
+  
+  dispatch('connectionend', {
+    nodeId: node.id,
+    isOutput,
+    portIndex
+  });
+}
   
   type Position = { x: number; y: number };
 
@@ -714,20 +720,26 @@ function handleTouchEnd(e: TouchEvent) {
   }
 </script>
 
-<div 
-  class="node {node.type}-node" 
+<div class="node {nodeClass}" 
   bind:this={nodeElement}
-  style="transform: translate({node.position.x}px, {node.position.y}px)"
+  class:dragging={isDragging}
+  style="left: {node.position.x}px; top: {node.position.y}px;"
   on:mousedown={handleMouseDown}
   on:mousemove={handleMouseMove}
   on:mouseup={handleMouseUp}
 >
   <!-- Input port (left side) -->
-  <div class="port input-port" 
-       on:mousedown={(e) => handlePortMouseDown(e, false)}
-       on:mouseup={(e) => handlePortMouseUp(e, false)}>
-    <div class="port-connector"></div>
-  </div>
+  {#if shouldHaveInputPort(node.type)}
+    <div 
+      class="port input-port" 
+      data-port-type="input"
+      data-port-index="0"
+      on:mousedown={(e) => handlePortMouseDown(e, false)}
+      on:mouseup={(e) => handlePortMouseUp(e, false)}
+    >
+      <div class="port-dot"></div>
+    </div>
+  {/if}
   
   <!-- Node content -->
   <div class="node-container" style="background: transparent">
@@ -766,12 +778,17 @@ function handleTouchEnd(e: TouchEvent) {
   </div>
   
   <!-- Output port (right side) -->
-  <div class="port output-port"
+  {#if shouldHaveOutputPort(node.type)}
+    <div 
+      class="port output-port"
+      data-port-type="output" 
       data-port-index="0"
-       on:mousedown={(e) => handlePortMouseDown(e, true)}
-       on:mouseup={(e) => handlePortMouseUp(e, true)}>
-    <div class="port-connector"></div>
-  </div>
+      on:mousedown={(e) => handlePortMouseDown(e, true)}
+      on:mouseup={(e) => handlePortMouseUp(e, true)}
+    >
+      <div class="port-dot"></div>
+    </div>
+  {/if}
   
   <!-- Context menu (shown on right-click or long press) -->
   {#if isContextMenuOpen}

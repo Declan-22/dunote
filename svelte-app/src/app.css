@@ -85,7 +85,7 @@
 /* Global Styles */
 body {
   
-  font-family: 'Geist', sans-serif;
+  font-family: 'Manrope', sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   transition: background-color var(--transition-normal), color var(--transition-normal);

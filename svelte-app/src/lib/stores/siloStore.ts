@@ -821,69 +821,43 @@ function generateOutputContent(inputs: any[]): string {
 }
 
 // Create a connection between nodes
-export function createConnection(
-  sourceId: string,
-  targetId: string,
-  siloId: string,
-  sourcePortIndex = 0,
-  targetPortIndex = 0
-) {
+export function createConnection(siloId: string, sourceId: string, targetId: string) {
   siloStore.update(store => {
-    const silo = store.find(s => s.id === siloId);
-    if (!silo) return store;
+    return store.map(silo => {
+      if (silo.id !== siloId) return silo;
+      
+      // Prevent duplicate connections
+      const exists = silo.edges.some(e => 
+        e.source === sourceId && e.target === targetId
+      );
+      
+      if (exists) return silo;
 
-    const sourceNode = silo.nodes.find(n => n.id === sourceId);
-    const targetNode = silo.nodes.find(n => n.id === targetId);
+      // Get actual node positions from the store
+      const sourceNode = silo.nodes.find(n => n.id === sourceId);
+      const targetNode = silo.nodes.find(n => n.id === targetId);
+      
+      if (!sourceNode || !targetNode) return silo;
 
-    if (!sourceNode || !targetNode || sourceId === targetId) return store;
+      const newEdge: SiloEdge = {
+        id: `${sourceId}-${targetId}-${Date.now()}`,
+        source: sourceId,
+        target: targetId,
+        siloId,
+        pathData: {
+          sourceX: sourceNode.position.x + 75,
+          sourceY: sourceNode.position.y + 25,
+          targetX: targetNode.position.x + 75,
+          targetY: targetNode.position.y + 25
+        },
+        pathType: 'bezier'
+      };
 
-    // Default port positions if not defined
-    const defaultOutputPort = { x: sourceNode.width || 150, y: 30 };
-    const defaultInputPort = { x: 0, y: 30 };
-
-    // Get actual port positions from the nodes
-    const sourcePort = sourceNode.portPositions?.output || defaultOutputPort;
-    const targetPort = targetNode.portPositions?.input || defaultInputPort;
-
-    // Calculate absolute positions
-    const sourceX = sourceNode.position.x + sourcePort.x;
-    const sourceY = sourceNode.position.y + sourcePort.y;
-    const targetX = targetNode.position.x + targetPort.x;
-    const targetY = targetNode.position.y + targetPort.y;
-
-    // Calculate distance for curve
-    const dx = targetX - sourceX;
-    const dy = targetY - sourceY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // Dynamic control point offset based on distance
-    const offset = Math.min(Math.max(distance / 3, 50), 150);
-
-    const pathData = {
-      sourceX,
-      sourceY,
-      targetX,
-      targetY,
-      controlPoint1X: sourceX + offset,
-      controlPoint1Y: sourceY,
-      controlPoint2X: targetX - offset,
-      controlPoint2Y: targetY
-    };
-
-    const newEdge: SiloEdge = {
-      id: crypto.randomUUID(),
-      source: sourceId,
-      target: targetId,
-      siloId,
-      pathType: 'bezier',
-      pathData,
-      animated: false
-    };
-
-    return store.map(s => s.id === siloId ? {
-      ...s,
-      edges: [...s.edges, newEdge]
-    } : s);
+      return {
+        ...silo,
+        edges: [...silo.edges, newEdge]
+      };
+    });
   });
 }
 

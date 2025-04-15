@@ -13,7 +13,7 @@ declare global {
     }
   }
 }
-
+declare module 'drawflow'
 export {};
 
 

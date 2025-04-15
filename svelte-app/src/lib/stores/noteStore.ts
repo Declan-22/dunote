@@ -14,6 +14,7 @@ export interface Note {
   ts_vector?: string;
   nodes?: Partial<Node>[];
   node_id?: string;
+  attachedNodes?: string[];
 }
 
 function createNoteStore() {
@@ -108,6 +109,35 @@ function createNoteStore() {
     
       if (error) throw error;
       noteStore.update(notes => notes.filter(n => n.id !== id));
+    },
+
+    async attachNodeToNote(noteId: string, nodeId: string) {
+      const { error } = await supabase
+        .from('note_nodes')
+        .insert({ note_id: noteId, node_id: nodeId });
+    
+      if (!error) {
+        update(notes => notes.map(n => 
+          n.id === noteId ? {
+            ...n,
+            attachedNodes: [...(n.attachedNodes || []), nodeId]
+          } : n
+        ));
+      }
+    },
+    
+    async loadNoteWithNodes(id: string): Promise<Note> {
+      const { data, error } = await supabase
+        .from('notes')
+        .select('*, attachedNodes:note_nodes ( nodes ( id, title ) )')
+        .eq('id', id)
+        .single();
+    
+      if (error) throw error;
+      return {
+        ...data,
+        attachedNodes: (data.attachedNodes as { nodes: any }[]).map((an: { nodes: any }) => an.nodes)
+      };
     },
 
     async attachNode(noteId: string, nodeId: string) {
