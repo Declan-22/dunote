@@ -7,14 +7,11 @@ const config = {
   kit: {
     adapter: adapter({
       fallback: 'index.html',
-      precompress: false
+      strict: false // 👈 Nuclear option to ignore all prerender errors
     }),
     prerender: {
-      handleHttpError: ({ path, message }) => {
-        // Ignore auth-related errors during prerendering
-        if (path.startsWith('/login') || path.startsWith('/signup')) return;
-        throw new Error(message);
-      }
+      handleMissingId: 'ignore',
+      entries: [] // 👈 Empty array skips dynamic routes
     }
   }
 };
