@@ -1,28 +1,55 @@
 // src/hooks.server.ts
 import { createServerClient } from '@supabase/ssr'
-import type { Handle } from '@sveltejs/kit'
+import { redirect, type Handle } from '@sveltejs/kit'
+import { supabase } from '$lib/supabaseClient';
 
 export const handle: Handle = async ({ event, resolve }) => {
-  
-    event.locals.supabase = createServerClient(
+  // Create server client with proper cookie handling
+  const supabase = createServerClient(
     import.meta.env.VITE_SUPABASE_URL,
     import.meta.env.VITE_SUPABASE_KEY,
     {
       cookies: {
         get: (key) => event.cookies.get(key),
         set: (key, value, options) => {
-          event.cookies.set(key, value, { ...options, path: '/' })
+          event.cookies.set(key, value, {
+            ...options,
+            path: '/',
+            sameSite: 'lax',
+            secure: import.meta.env.PROD
+          });
         },
         remove: (key, options) => {
-          event.cookies.delete(key, { ...options, path: '/' })
+          event.cookies.delete(key, {
+            ...options, 
+            path: '/',
+            sameSite: 'lax',
+            secure: import.meta.env.PROD
+          });
         }
       }
     }
-  )
-  console.log('Session in hooks:', (await event.locals.supabase.auth.getSession()).data.session)
-  event.locals.session = (await event.locals.supabase.auth.getSession()).data.session
+  );
 
-  return resolve(event)
-}
+  // Get session from cookie
+  const { data: { session }, error } = await supabase.auth.getSession();
+  event.locals.session = session;
+
+  // Protect auth routes
+  if (event.url.pathname.startsWith('/notes') && !session) {
+    throw redirect(303, '/login');
+  }
+
+  // Prevent logged-in users from accessing auth pages
+  if (event.url.pathname.startsWith('/login') && session) {
+    throw redirect(303, '/notes');
+  }
+
+  return resolve(event, {
+    filterSerializedResponseHeaders(name) {
+      return name === 'content-range';
+    }
+  });
+};
 
 
