@@ -23,6 +23,8 @@
   let connectionStartPosition = { x: 0, y: 0 };
   let connectionEndPosition = { x: 0, y: 0 };
   let tempConnectionPath = '';
+  let currentHoverNodeId: string | null = null;
+  let currentHoverIsOutput: boolean | null = null;
   
   $: silo = $siloStore.find(s => s.id === siloId) || {
     id: siloId,
@@ -31,10 +33,10 @@
     name: 'Loading...'
   };
 
-  function handleCreateConnection(event) {
-    const { source, target } = event.detail;
-    createConnection(source, target, siloId);
-  }
+  function handleCreateConnection(event: CustomEvent<{ source: string; target: string }>) {
+  const { source, target } = event.detail;
+  createConnection(siloId, source, target);
+}
   
   // Optimized pan/zoom handlers
   function handleWheel(e: WheelEvent) {
@@ -130,60 +132,204 @@
     startNodeDrag = null;
   }
 
+  function handlePortHover(event: CustomEvent) {
+  const { nodeId, isOutput } = event.detail;
+  currentHoverNodeId = nodeId;
+  currentHoverIsOutput = isOutput;
+  
+  console.log("Port hover:", nodeId, isOutput ? "output" : "input");
+}
+
+  function debugConnectionStart(event) {
+  console.log('%c CONNECTION START ', 'background: green; color: white', {
+    nodeId: event.detail.nodeId,
+    isOutput: event.detail.isOutput,
+    position: event.detail.position
+  });
+  
+  debugConnectionAttempts.push({
+    startTime: new Date(),
+    startNode: event.detail.nodeId,
+    startIsOutput: event.detail.isOutput,
+    complete: false
+  });
+}
+
   // Connection drawing handlers
   function handleConnectionStart(event: CustomEvent) {
   const { nodeId, position, isOutput } = event.detail;
+  
+  console.log("CONNECTION START", {
+    nodeId, position, isOutput
+  });
+  
   isDrawingConnection = true;
   connectionStartNode = nodeId;
   connectionStartIsOutput = isOutput;
   
-  // Store the actual position (not scaled by viewport)
-  connectionStartPosition = {
-    x: position.x,
-    y: position.y
-  };
-  connectionEndPosition = { ...connectionStartPosition };
+  if (container) {
+    const rect = container.getBoundingClientRect();
+    
+    // Calculate relative position in the viewport
+    connectionStartPosition = {
+      x: (position.x - rect.left) / viewport.zoom,
+      y: (position.y - rect.top) / viewport.zoom
+    };
+    
+    connectionEndPosition = { ...connectionStartPosition };
+  }
+  
+  // Prevent default behavior
+  event.preventDefault && event.preventDefault();
+}
+
+// Call this at the beginning of handleConnectionEnd
+function debugConnectionEnd(event) {
+  console.log('%c CONNECTION END ', 'background: blue; color: white', {
+    nodeId: event.detail.nodeId,
+    isOutput: event.detail.isOutput
+  });
+  
+  // Find the last incomplete connection attempt
+  const lastAttempt = [...debugConnectionAttempts].reverse().find(a => !a.complete);
+  if (lastAttempt) {
+    lastAttempt.endNode = event.detail.nodeId;
+    lastAttempt.endIsOutput = event.detail.isOutput;
+    lastAttempt.complete = true;
+    lastAttempt.endTime = new Date();
+    lastAttempt.duration = lastAttempt.endTime - lastAttempt.startTime;
+    
+    // Now analyze if this should create a valid connection
+    const shouldCreateConnection = 
+      lastAttempt.startNode !== lastAttempt.endNode && // Different nodes
+      ((lastAttempt.startIsOutput && !lastAttempt.endIsOutput) || // Output to input
+       (!lastAttempt.startIsOutput && lastAttempt.endIsOutput));  // Input to output
+    
+    lastAttempt.shouldCreateConnection = shouldCreateConnection;
+    
+    if (shouldCreateConnection) {
+      console.log('%c SHOULD CREATE CONNECTION ', 'background: purple; color: white', {
+        source: lastAttempt.startIsOutput ? lastAttempt.startNode : lastAttempt.endNode,
+        target: lastAttempt.startIsOutput ? lastAttempt.endNode : lastAttempt.startNode
+      });
+    } else {
+      console.log('%c INVALID CONNECTION ', 'background: red; color: white', {
+        reason: lastAttempt.startNode === lastAttempt.endNode ? 
+          "Same node" : "Both inputs or both outputs"
+      });
+    }
+  }
 }
 
 function handleConnectionEnd(event: CustomEvent) {
-  if (!isDrawingConnection || !connectionStartNode) return;
+  if (!isDrawingConnection || !connectionStartNode) {
+    console.log("CONNECTION END - Not drawing or no start node");
+    return;
+  }
   
   const { nodeId, isOutput } = event.detail;
   
-  // Only create connection if source and target are different nodes
-  // and source is output and target is input (or vice versa)
-  if (nodeId && connectionStartNode !== nodeId) {
-    let source, target;
-    
-    // Determine which node is source and which is target
-    if (connectionStartIsOutput && !isOutput) {
-      // Starting from output, ending at input (normal case)
-      source = connectionStartNode;
-      target = nodeId;
-    } else if (!connectionStartIsOutput && isOutput) {
-      // Starting from input, ending at output (reverse case)
-      source = nodeId;
-      target = connectionStartNode;
-    } else {
-      // Can't connect output to output or input to input
-      isDrawingConnection = false;
-      connectionStartNode = null;
-      return;
-    }
-    
-    // Create the actual connection
-    dispatch('createconnection', { source, target });
+  const endNodeId = currentHoverNodeId || event.detail.nodeId;
+  const endIsOutput = currentHoverIsOutput !== null ? currentHoverIsOutput : event.detail.isOutput;
+  
+  console.log("CONNECTION END", {
+    isDrawingConnection,
+    startNode: connectionStartNode,
+    startIsOutput: connectionStartIsOutput,
+    endNode: endNodeId,
+    endIsOutput
+  });
+
+  if (!endNodeId) {
+    console.log("Connection cancelled: no target node");
+    return;
+  }
+
+  if (connectionStartNode === endNodeId) {
+    console.log(`Blocked self-connection on ${endNodeId}`);
+    return;
   }
   
-  // Reset connection drawing state
+  // Only create connection if source and target are different nodes
+  if (endNodeId && connectionStartNode !== endNodeId) {
+    // Determine which node is source and which is target
+    let sourceId, targetId;
+    
+    if (connectionStartIsOutput && !endIsOutput) {
+      // Normal flow: output → input
+      sourceId = connectionStartNode;
+      targetId = endNodeId;
+      console.log(`Creating connection from ${sourceId} to ${targetId}`);
+      createConnection(siloId, sourceId, targetId);
+    } else if (!connectionStartIsOutput && endIsOutput) {
+      // Reverse flow: input → output
+      sourceId = endNodeId;
+      targetId = connectionStartNode;
+      console.log(`Creating connection from ${sourceId} to ${targetId}`);
+      createConnection(siloId, sourceId, targetId);
+    } else {
+      console.log("Cannot connect: both ports are inputs or both are outputs");
+    }
+  } else {
+    console.log(`Cannot connect: same node (${endNodeId}) or nodeId is null`);
+  }
+  
+  // Reset all state
   isDrawingConnection = false;
   connectionStartNode = null;
+  currentHoverNodeId = null;
+  currentHoverIsOutput = null;
 }
 
-  onMount(() => {
-    // Initial setup
-    updateAllConnectionPaths(siloId);
-  });
+function handleGlobalMouseMove(e: MouseEvent) {
+  if (!isDrawingConnection || !container) return;
+  
+  const rect = container.getBoundingClientRect();
+  connectionEndPosition = {
+    x: (e.clientX - rect.left) / viewport.zoom,
+    y: (e.clientY - rect.top) / viewport.zoom
+  };
+}
+
+function handleKeyDown(e: KeyboardEvent) {
+  if (e.key === 'D' && e.ctrlKey) {
+    debugShowState = !debugShowState;
+    console.log('%c DEBUG STATE ', 'background: orange; color: white', {
+      silo,
+      viewport,
+      isDrawingConnection,
+      connectionStartNode,
+      connectionStartIsOutput,
+      debugConnectionAttempts
+    });
+  }
+}
+
+onMount(() => {
+  // Existing code
+  updateAllConnectionPaths(siloId);
+  
+  // Add GLOBAL mouse move listener
+  document.addEventListener('mousemove', handleGlobalMouseMove);
+  
+  return () => {
+    document.removeEventListener('mousemove', handleGlobalMouseMove);
+  };
+});
+
+
+let debugConnectionAttempts: Array<{
+  startTime: Date;
+  startNode: string;
+  startIsOutput: boolean;
+  complete: boolean;
+  endNode?: string;
+  endIsOutput?: boolean;
+  endTime?: Date;
+  duration?: number;
+  shouldCreateConnection?: boolean;
+}> = [];
+let debugShowState = false;
 </script>
 
 <div class="flow-container" bind:this={container} role="application"
@@ -202,7 +348,7 @@ function handleConnectionEnd(event: CustomEvent) {
     {/each}
     
     <!-- Drawing connection if active -->
-    {#if isDrawingConnection}
+    {#if isDrawingConnection && connectionStartNode !== currentHoverNodeId}
       <path 
         class="connection-drawing"
         d={`M ${connectionStartPosition.x} ${connectionStartPosition.y} 
@@ -220,18 +366,19 @@ function handleConnectionEnd(event: CustomEvent) {
   <!-- HTML layer for nodes -->
   <div class="nodes-layer" style="transform: translate({viewport.x}px, {viewport.y}px) scale({viewport.zoom});">
     {#each silo.nodes as node (node.id)}
-      <Node 
-        {node}
-        {siloId}
-        {viewport}
-        scale={viewport.zoom}
-        on:dragstart={handleNodeDragStart}
-        on:drag={handleNodeDrag}
-        on:dragend={handleNodeDragEnd}
-        on:connectionstart={handleConnectionStart}
-        on:connectionend={handleConnectionEnd}
-        on:createconnection={handleCreateConnection}
-      />
+     <Node 
+       {node}
+       {siloId}
+       {viewport}
+       scale={viewport.zoom}
+       on:dragstart={handleNodeDragStart}
+       on:drag={handleNodeDrag}
+       on:dragend={handleNodeDragEnd}
+       on:connectionstart={handleConnectionStart}
+       on:connectionend={handleConnectionEnd}
+       on:porthover={handlePortHover}  
+       on:createconnection={handleCreateConnection}
+     />
     {/each}
   </div>
 </div>

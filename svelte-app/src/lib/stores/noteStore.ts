@@ -26,17 +26,22 @@ function createNoteStore() {
     update,
 
     async loadNotes(page = 1, itemsPerPage = 20): Promise<Note[]> {
-      const from = (page - 1) * itemsPerPage;
-      const to = from + itemsPerPage - 1;
-    
       const { data, error } = await supabase
-        .from('notes')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(from, to);
-    
-      return error ? [] : data || [];
-    },
+      .from('notes')
+      .select(`
+        *,
+        attachedNodes:note_nodes(
+          node_id,
+          nodes!inner(id, title)
+        )
+      `)
+      .order('created_at', { ascending: false });
+  
+    return data?.map(note => ({
+      ...note,
+      attachedNodes: note.attachedNodes?.map((conn: { nodes: any }) => conn.nodes) || []
+    })) || [];
+  },
 
     async loadNoteById(id: string) {
       const { data, error } = await supabase

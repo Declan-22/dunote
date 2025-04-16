@@ -372,12 +372,13 @@ function handleTouchEnd(e: TouchEvent) {
   // Port connection handlers
   function handlePortMouseDown(e: MouseEvent, isOutput: boolean) {
   e.stopPropagation();
+  e.preventDefault(); // Prevent other handlers
   
   const portElement = e.currentTarget as HTMLElement;
   const rect = portElement.getBoundingClientRect();
   const portIndex = parseInt(portElement.dataset.portIndex || '0');
   
-  // Calculate position in screen coordinates (not scaled by viewport)
+  // Calculate position in screen coordinates
   const position = {
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2
@@ -393,8 +394,23 @@ function handleTouchEnd(e: TouchEvent) {
   });
 }
 
+function handlePortMouseOver(e: MouseEvent, isOutput: boolean) {
+  e.stopPropagation();
+  
+  const portElement = e.currentTarget as HTMLElement;
+  const portIndex = parseInt(portElement.dataset.portIndex || '0');
+  
+  // Dispatch a hover event
+  dispatch('porthover', {
+    nodeId: node.id,
+    isOutput,
+    portIndex
+  });
+}
+
 function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   e.stopPropagation();
+  e.preventDefault(); // Prevent other handlers
   
   const portElement = e.currentTarget as HTMLElement;
   const portIndex = parseInt(portElement.dataset.portIndex || '0');
@@ -407,6 +423,8 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
     portIndex
   });
 }
+
+
   
   type Position = { x: number; y: number };
 
@@ -713,17 +731,37 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   }
   
   // Get icon for node function
-  function getFunctionIcon(iconName: string): string {
+  export function getFunctionIcon(iconName: string): string {
   const icons: Record<string, string> = {
+    // Basic function icons
     'play': '<polygon points="5 3 19 12 5 21 5 3"></polygon>',
-      'rotate-cw': '<polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>',
-      'filter': '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>',
-      'git-merge': '<circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M6 21V9a9 9 0 0 0 9 9"></path>',
-      'scissors': '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line>'
-    };
+    'rotate-cw': '<polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>',
+    'filter': '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>',
+    'git-merge': '<circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M6 21V9a9 9 0 0 0 9 9"></path>',
+    'scissors': '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line>',
     
-    return icons[iconName] || '<circle cx="12" cy="12" r="10"></circle>';
-  }
+    // Resource function icons
+    'copy': '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
+    'paste': '<path d="M15 2H9a1 1 0 0 0-1 1v2c0 .6.4 1 1 1h6c.6 0 1-.4 1-1V3c0-.6-.4-1-1-1Z"></path><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M16 4h2a2 2 0 0 1 2 2v4"></path><path d="M21 14H11"></path><path d="m15 10-4 4 4 4"></path>',
+    'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
+    'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>',
+    'book': '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>',
+    
+    // Task function icons
+    'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>',
+    'shield': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
+    'flag': '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>',
+    
+    // Additional function icons
+    'plus': '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>',
+    'user': '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
+    'calendar': '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>',
+    'extract': '<path d="M10 1.5V9h-8.5"></path><path d="M16 3.8c.8.8 1.5 1.5 2.3 2.3"></path><path d="M14 12v7.5L1 12"></path><path d="M5 15h14v6"></path>',
+    'summarize': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line>'
+  };
+  
+  return icons[iconName] || '<circle cx="12" cy="12" r="10"></circle>'; // Default circle icon
+}
 </script>
 
 <div class="node {nodeClass}" 
@@ -734,6 +772,31 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   on:mousemove={handleMouseMove}
   on:mouseup={handleMouseUp}
 >
+
+  <!-- Status Indicators -->
+  {#if node.data.isRunning}
+    <div class="node-running-indicator" transition:fade={{ duration: 200 }}>
+      <div class="spinner"></div>
+    </div>
+  {/if}
+
+  {#if node.data.isComplete}
+    <div class="node-complete-indicator" transition:fade={{ duration: 200 }}>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 6L9 17l-5-5"></path>
+      </svg>
+    </div>
+  {/if}
+
+  {#if node.data.error}
+    <div class="node-error-indicator" transition:fade={{ duration: 200 }}>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+    </div>
+  {/if}
   <!-- Input port (left side) -->
   {#if shouldHaveInputPort(node.type)}
     <div 
@@ -742,6 +805,7 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
       data-port-index="0"
       on:mousedown={(e) => handlePortMouseDown(e, false)}
       on:mouseup={(e) => handlePortMouseUp(e, false)}
+      on:mouseover={(e) => handlePortMouseOver(e, false)}
     >
       <div class="port-dot"></div>
     </div>
@@ -768,6 +832,12 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           </svg>
+            {:else if node.type === 'output'}
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 17l5-5-5-5"></path>
+              <path d="M12 12h10"></path>
+              <path d="M3 4v16"></path>
+            </svg>
         {:else}
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="12" cy="12" r="10"></circle>
@@ -794,6 +864,29 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
       on:mouseup={(e) => handlePortMouseUp(e, true)}
     >
       <div class="port-dot"></div>
+    </div>
+  {/if}
+
+    <!-- Result Panel -->
+    {#if node.data.result && isExpanded}
+    <div class="node-result-panel" transition:fly={{ y: 20, duration: 200 }}>
+      <h4>Result</h4>
+      {#if node.data.result.type === 'resource'}
+        <p><strong>URL:</strong> {node.data.result.url}</p>
+        <p><strong>Summary:</strong> {node.data.result.summary}</p>
+      {:else if node.data.result.type === 'task'}
+        <p><strong>Status:</strong> {node.data.result.new_status}</p>
+        <p><strong>Completed:</strong> {node.data.result.completed ? 'Yes' : 'No'}</p>
+      {:else if node.data.result.type === 'milestone'}
+        <p><strong>Achieved:</strong> {node.data.result.achieved ? 'Yes' : 'No'}</p>
+        <p><strong>Dependencies:</strong> {node.data.result.dependency_count}</p>
+      {:else if node.data.result.type === 'project'}
+        <p><strong>Progress:</strong> {node.data.result.progress}%</p>
+        <p><strong>Tasks:</strong> {node.data.result.tasks_completed}/{node.data.result.tasks_total}</p>
+      {:else}
+        <pre class="result-json">{JSON.stringify(node.data.result, null, 2)}</pre>
+      {/if}
+      <p class="result-timestamp">Last run: {new Date(node.data.lastRun).toLocaleString()}</p>
     </div>
   {/if}
   
@@ -1219,5 +1312,102 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   
   .resource-node .node-circle {
     background-color: #2ecc71;
+  }
+
+  .node-running-indicator {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    background: var(--bg-secondary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--brand-green);
+    z-index: 5;
+  }
+
+  .node-running-indicator .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid transparent;
+    border-top-color: var(--brand-green);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .node-complete-indicator {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    background: var(--brand-green);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    z-index: 5;
+  }
+
+  .node-error-indicator {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    background: var(--error);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    z-index: 5;
+  }
+
+  .node-result-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px;
+    margin-top: 8px;
+    font-size: 0.8rem;
+    max-width: 250px;
+  }
+
+  .node-result-panel h4 {
+    margin: 0 0 6px 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+  }
+
+  .node-result-panel p {
+    margin: 4px 0;
+    color: var(--text-secondary);
+  }
+
+  .result-json {
+    font-family: monospace;
+    font-size: 0.7rem;
+    background: var(--bg-primary);
+    padding: 4px;
+    border-radius: 3px;
+    overflow-x: auto;
+    max-height: 100px;
+  }
+
+  .result-timestamp {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    text-align: right;
+    margin-top: 6px;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 </style>

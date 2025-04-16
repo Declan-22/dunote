@@ -4,6 +4,7 @@ import { browser } from '$app/environment';
 import { validateNodeConnections } from '$lib/utils/nodeUtils';
 import { NODE_TYPES } from '$lib/types/nodes';
 import { nodeUtils } from '$lib/utils/nodeUtils';
+import { goto } from '$app/navigation';
 
 export type Position = { x: number; y: number };
 export type SiloNodeId = string;
@@ -663,6 +664,267 @@ export function executeNodeFunction(siloId: string, nodeId: string, functionId: 
   propagateData(siloId, nodeId, result);
 }
 
+// Execute workflow starting from a specific node
+export async function executeWorkflow(siloId: string) {
+  const silo = get(siloStore).find(s => s.id === siloId);
+  if (!silo) return;
+  
+  // Find starting nodes (nodes with no incoming connections)
+  const startNodes = silo.nodes.filter(node => {
+    const hasIncomingEdges = silo.edges.some(edge => edge.target === node.id);
+    return !hasIncomingEdges;
+  });
+  
+  // Set all nodes to not running
+  siloStore.update(store => 
+    store.map(s => {
+      if (s.id !== siloId) return s;
+      return {
+        ...s,
+        nodes: s.nodes.map(n => ({
+          ...n,
+          data: { ...n.data, isRunning: false, isComplete: false }
+        }))
+      };
+    })
+  );
+
+  // Start execution from each start node
+  startNodes.forEach(node => {
+    executeNode(siloId, node.id);
+  });
+}
+
+// Execute a single node
+export async function executeNode(siloId: string, nodeId: string) {
+  // Mark node as running
+  siloStore.update(store => 
+    store.map(s => {
+      if (s.id !== siloId) return s;
+      return {
+        ...s,
+        nodes: s.nodes.map(n => {
+          if (n.id !== nodeId) return n;
+          return {
+            ...n,
+            data: { ...n.data, isRunning: true }
+          };
+        })
+      };
+    })
+  );
+  
+  // Get the node
+  const silo = get(siloStore).find(s => s.id === siloId);
+  if (!silo) return;
+  
+  const node = silo.nodes.find(n => n.id === nodeId);
+  if (!node) return;
+  
+  try {
+    // Execute node based on type
+    const result = await processNodeExecution(node, silo);
+    
+    // Update node with result and mark as complete
+    siloStore.update(store => 
+      store.map(s => {
+        if (s.id !== siloId) return s;
+        return {
+          ...s,
+          nodes: s.nodes.map(n => {
+            if (n.id !== nodeId) return n;
+            return {
+              ...n,
+              data: { 
+                ...n.data, 
+                isRunning: false,
+                isComplete: true,
+                result,
+                lastRun: new Date().toISOString()
+              }
+            };
+          })
+        };
+      })
+    );
+    
+    // Find all outgoing connections and execute those nodes
+    const outgoingEdges = silo.edges.filter(edge => edge.source === nodeId);
+    
+    // Execute next nodes sequentially with small delay for visual effect
+    for (const edge of outgoingEdges) {
+      // Animate the edge
+      siloStore.update(store => 
+        store.map(s => {
+          if (s.id !== siloId) return s;
+          return {
+            ...s,
+            edges: s.edges.map(e => {
+              if (e.id !== edge.id) return e;
+              return { ...e, animated: true };
+            })
+          };
+        })
+      );
+      
+      // Small delay before executing next node
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Execute the next node
+      await executeNode(siloId, edge.target);
+      
+      // Stop edge animation
+      siloStore.update(store => 
+        store.map(s => {
+          if (s.id !== siloId) return s;
+          return {
+            ...s,
+            edges: s.edges.map(e => {
+              if (e.id !== edge.id) return e;
+              return { ...e, animated: false };
+            })
+          };
+        })
+      );
+    }
+  } catch (error) {
+    // Handle errors
+    console.error(`Error executing node ${nodeId}:`, error);
+    
+    // Mark node as failed
+    siloStore.update(store => 
+      store.map(s => {
+        if (s.id !== siloId) return s;
+        return {
+          ...s,
+          nodes: s.nodes.map(n => {
+            if (n.id !== nodeId) return n;
+            return {
+              ...n,
+              data: { 
+                ...n.data, 
+                isRunning: false,
+                isComplete: false,
+                error: error.message || 'Unknown error'
+              }
+            };
+          })
+        };
+      })
+    );
+  }
+  await goto(`/silos/${siloId}/output`);
+}
+
+// Process execution for different node types
+async function processNodeExecution(node: SiloNode, silo: Silo) {
+  // Get input data from incoming connections
+  const inputData = collectNodeInputs(node, silo);
+  
+  // Wait a bit to simulate processing
+  await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1000));
+  
+  switch(node.type) {
+    case 'resource':
+      return processResourceNode(node, inputData);
+    case 'task':
+      return processTaskNode(node, inputData);
+    case 'milestone':
+      return processMilestoneNode(node, inputData);
+    case 'project':
+      return processProjectNode(node, inputData);
+    // Add more node types as needed
+    default:
+      return { message: `Processed ${node.type} node`, timestamp: new Date().toISOString() };
+  }
+}
+
+// Collect inputs from connected nodes
+function collectNodeInputs(targetNode: SiloNode, silo: Silo) {
+  // Find all incoming connections
+  const incomingEdges = silo.edges.filter(edge => edge.target === targetNode.id);
+  
+  // Collect data from source nodes
+  const inputs = incomingEdges.map(edge => {
+    const sourceNode = silo.nodes.find(n => n.id === edge.source);
+    if (!sourceNode) return null;
+    
+    return {
+      nodeId: sourceNode.id,
+      nodeType: sourceNode.type,
+      data: sourceNode.data.result || {},
+      title: sourceNode.data.title || 'Untitled',
+      edgeId: edge.id
+    };
+  }).filter(Boolean);
+  
+  return inputs;
+}
+
+// Processing functions for different node types
+function processResourceNode(node: SiloNode, inputs: any[]) {
+  // Sample resource processing
+  const url = node.data.url || '';
+  const title = node.data.title || 'Untitled Resource';
+  
+  return {
+    type: 'resource',
+    title,
+    url,
+    processed: true,
+    summary: node.data.summary || `Summary of ${title}`,
+    key_points: node.data.key_points || ['Point 1', 'Point 2'],
+    inputs: inputs.map(i => i.title)
+  };
+}
+
+function processTaskNode(node: SiloNode, inputs: any[]) {
+  // Update task status
+  const status = node.data.status || 'not-started';
+  const nextStatus = status === 'not-started' ? 'in-progress' : 
+                     status === 'in-progress' ? 'completed' : 'completed';
+  
+  return {
+    type: 'task',
+    title: node.data.title,
+    previous_status: status,
+    new_status: nextStatus,
+    completed: nextStatus === 'completed',
+    inputs_processed: inputs.length,
+    timestamp: new Date().toISOString()
+  };
+}
+
+function processMilestoneNode(node: SiloNode, inputs: any[]) {
+  // Check if all required inputs are complete
+  const allComplete = inputs.every(input => input.data && input.data.completed);
+  
+  return {
+    type: 'milestone',
+    title: node.data.title,
+    achieved: allComplete,
+    dependencies_met: allComplete,
+    dependency_count: inputs.length,
+    timestamp: new Date().toISOString()
+  };
+}
+
+function processProjectNode(node: SiloNode, inputs: any[]) {
+  // Calculate project progress
+  const totalTasks = inputs.length || 1;
+  const completedTasks = inputs.filter(i => i.data && i.data.completed).length;
+  const progress = Math.round((completedTasks / totalTasks) * 100);
+  
+  return {
+    type: 'project',
+    title: node.data.title,
+    progress: progress,
+    tasks_total: totalTasks,
+    tasks_completed: completedTasks,
+    timestamp: new Date().toISOString()
+  };
+}
+
 // Sample node processing functions
 function processNodeRun(node: SiloNode, silo: Silo) {
   const commonData = {
@@ -822,40 +1084,83 @@ function generateOutputContent(inputs: any[]): string {
 
 // Create a connection between nodes
 export function createConnection(siloId: string, sourceId: string, targetId: string) {
+  const silo = get(siloStore).find(s => s.id === siloId);
+  const sourceNode = silo?.nodes.find(n => n.id === sourceId);
+  const targetNode = silo?.nodes.find(n => n.id === targetId);
+  
+  if (!sourceNode || !targetNode || !validateConnection(sourceNode, targetNode)) {
+    console.log("Invalid connection blocked");
+    return;
+  }
+  
+  if (sourceId === targetId) {
+    console.error(`Self-connection blocked: ${sourceId}`);
+    return;
+  }
+  
   siloStore.update(store => {
-    return store.map(silo => {
-      if (silo.id !== siloId) return silo;
-      
-      // Prevent duplicate connections
-      const exists = silo.edges.some(e => 
-        e.source === sourceId && e.target === targetId
-      );
-      
-      if (exists) return silo;
+    const silo = store.find(s => s.id === siloId);
+    if (!silo) {
+      console.error(`Silo ${siloId} not found`);
+      return store;
+    }
+    
+    // Prevent duplicate connections
+    const exists = silo.edges.some(e => 
+      e.source === sourceId && e.target === targetId
+    );
+    
+    if (exists) {
+      console.log(`Connection from ${sourceId} to ${targetId} already exists`);
+      return store;
+    }
 
-      // Get actual node positions from the store
-      const sourceNode = silo.nodes.find(n => n.id === sourceId);
-      const targetNode = silo.nodes.find(n => n.id === targetId);
-      
-      if (!sourceNode || !targetNode) return silo;
+    // Get actual node positions from the store
+    const sourceNode = silo.nodes.find(n => n.id === sourceId);
+    const targetNode = silo.nodes.find(n => n.id === targetId);
+    
+    if (!sourceNode || !targetNode) {
+      console.error(`Source node ${sourceId} or target node ${targetId} not found`);
+      return store;
+    }
 
-      const newEdge: SiloEdge = {
-        id: `${sourceId}-${targetId}-${Date.now()}`,
-        source: sourceId,
-        target: targetId,
-        siloId,
-        pathData: {
-          sourceX: sourceNode.position.x + 75,
-          sourceY: sourceNode.position.y + 25,
-          targetX: targetNode.position.x + 75,
-          targetY: targetNode.position.y + 25
-        },
-        pathType: 'bezier'
-      };
+    // Get port positions (use default if not set)
+    const sourcePortPos = sourceNode.portPositions?.output || { x: sourceNode.width || 150, y: 30 };
+    const targetPortPos = targetNode.portPositions?.input || { x: 0, y: 30 };
+    
+    const sourceX = sourceNode.position.x + sourcePortPos.x;
+    const sourceY = sourceNode.position.y + sourcePortPos.y;
+    const targetX = targetNode.position.x + targetPortPos.x;
+    const targetY = targetNode.position.y + targetPortPos.y;
+    
+    // Calculate control points for bezier curve
+    const deltaX = targetX - sourceX;
+    const offset = Math.min(Math.abs(deltaX) * 0.5, 150);
+    
+    const newEdge = {
+      id: `${sourceId}-${targetId}-${Date.now()}`,
+      source: sourceId,
+      target: targetId,
+      siloId,
+      pathData: {
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+        controlPoint1X: sourceX + (deltaX > 0 ? offset : -offset),
+        controlPoint1Y: sourceY,
+        controlPoint2X: targetX - (deltaX > 0 ? offset : -offset),
+        controlPoint2Y: targetY
+      },
+      pathType: 'bezier' as const
+    };
 
+    // Update the silo with the new edge
+    return store.map(s => {
+      if (s.id !== siloId) return s;
       return {
-        ...silo,
-        edges: [...silo.edges, newEdge]
+        ...s,
+        edges: [...s.edges, newEdge]
       };
     });
   });
@@ -949,18 +1254,32 @@ export function updateAllConnectionPaths(siloId: string) {
         
         if (!sourceNode || !targetNode) return edge;
         
-        const pathData = calculateConnectionPath(
-          sourceNode,
-          targetNode,
-          edge.sourceHandle,
-          edge.targetHandle
-        );
+        // Get port positions (use default if not set)
+        const sourcePortPos = sourceNode.portPositions?.output || { x: sourceNode.width || 150, y: 30 };
+        const targetPortPos = targetNode.portPositions?.input || { x: 0, y: 30 };
         
-        // Explicitly specify pathType as a literal type
+        const sourceX = sourceNode.position.x + sourcePortPos.x;
+        const sourceY = sourceNode.position.y + sourcePortPos.y;
+        const targetX = targetNode.position.x + targetPortPos.x;
+        const targetY = targetNode.position.y + targetPortPos.y;
+        
+        // Calculate control points for bezier curve
+        const deltaX = targetX - sourceX;
+        const offset = Math.min(Math.abs(deltaX) * 0.5, 150);
+        
         return {
           ...edge,
           pathType: 'bezier' as const,
-          pathData
+          pathData: {
+            sourceX,
+            sourceY,
+            targetX,
+            targetY,
+            controlPoint1X: sourceX + (deltaX > 0 ? offset : -offset),
+            controlPoint1Y: sourceY,
+            controlPoint2X: targetX - (deltaX > 0 ? offset : -offset),
+            controlPoint2Y: targetY
+          }
         };
       });
       
@@ -1037,18 +1356,16 @@ export function validateSiloNodes(siloId: string) {
   });
 }
 
-function validateConnection(source: SiloNode, target: SiloNode) {
-  // Prevent connections to self
-  if (source.id === target.id) return false;
+function validateConnection(source: SiloNode, target: SiloNode): boolean {
+  // Block self-connections
+  if (source.id === target.id) {
+    console.log(`Self-connection blocked between ${source.id} and ${target.id}`);
+    return false;
+  }
   
-  // Type validation - modify these rules as needed
-  const validConnections: Partial<Record<NodeType, NodeType[]>> = {
-    'resource': ['task', 'milestone'],
-    'task': ['milestone', 'task'],
-    'milestone': ['task']
-  };
-
-  return validConnections[source.type]?.includes(target.type) ?? true;
+  // Allow all connections except self-connections for now
+  // You can add type-specific validation later
+  return true;
 }
 
 // Update silo view state (pan/zoom)
@@ -1113,7 +1430,8 @@ const createSiloStore = () => {
       }));
     },
     // Create a connection between nodes
-    createConnection: (sourceId: string, targetId: string) => {
+    createConnection: (siloId: string, sourceId: string, targetId: string) => {
+      console.log(`CREATING CONNECTION: silo=${siloId}, source=${sourceId}, target=${targetId}`);
       update(state => {
         const sourceNode = state.nodes.find(n => n.id === sourceId);
         const targetNode = state.nodes.find(n => n.id === targetId);
@@ -1129,10 +1447,11 @@ const createSiloStore = () => {
           siloId: '',        // Add this required property
           type: 'function'
         };
-
+        console.log(`CONNECTION CREATED: ${sourceId} -> ${targetId}`);
         return {
           ...state,
           connections: [...state.connections, newConnection]
+          
         };
       });
     },

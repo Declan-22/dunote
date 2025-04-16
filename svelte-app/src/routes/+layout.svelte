@@ -8,17 +8,9 @@
   	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
   	import { user } from '$lib/stores/userStore';
-  // Removed unused import for session
-	import { goto } from '$app/navigation';
 
 
-	  supabase.auth.onAuthStateChange((event, authSession) => {
-    if (event === 'SIGNED_IN') {
-      user.set(authSession?.user || null);
-      goto('/notes');
-    }
-  });
-
+	
   if (browser) {
     onMount(() => {
       const savedTheme = localStorage.getItem('theme') || 'dark';

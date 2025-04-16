@@ -10,6 +10,9 @@
   import type { NodeType } from '$lib/types/nodes';
   import { supabase } from '$lib/supabaseClient'; // Import your Supabase client
   import { user } from '$lib/stores/userStore';
+  import { executeWorkflow } from '$lib/stores/siloStore'; // Import your workflow execution function
+
+
 
   // State variables
   let showLibrary = false;
@@ -68,9 +71,21 @@
     }
   }
 
-  function handleFlowStart() {
-    // Start node execution logic
+function handleFlowStart() {
+  if (!silo) return;
+  
+  // Execute the workflow
+  executeWorkflow(silo.id);
+  
+  // Add animation for trigger node
+  const triggerButton = document.querySelector('.trigger-button');
+  if (triggerButton) {
+    triggerButton.classList.add('running');
+    setTimeout(() => {
+      triggerButton.classList.remove('running');
+    }, 2000);
   }
+}
 
   // Connection handling for temporary connections during dragging
   function handleConnectionStart(event: CustomEvent<{ nodeId: string, position: Position, isOutput: boolean }>) {
@@ -239,7 +254,9 @@
               </svg>
               Back
           </a>
-          
+          <a href={`/silos/${silo.id}/output`} class="output-link">
+            View Output
+          </a>
           {#if renamingSilo}
               <input
                   bind:value={newSiloName}
@@ -288,7 +305,7 @@
           </svg>
       {/if}
       <div class="trigger-container">
-        <TriggerNode on:triggerFlow={handleFlowStart} />
+        <TriggerNode siloId={silo.id} on:triggerFlow={handleFlowStart} />
       </div>
       <!-- Add node button -->
       <button

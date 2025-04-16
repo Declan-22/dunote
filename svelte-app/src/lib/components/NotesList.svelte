@@ -125,11 +125,11 @@
           <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[var(--brand-green)]"></div>
       </div>
   {:else if notes.length === 0}
-      <div class="bg-white dark:bg-gray-800 rounded-lg p-8 text-center border border-gray-200 dark:border-gray-700">
+      <div class="bg-[var(--bg-secondary)] rounded-lg p-8 text-center border border-[var(--border-color)]">
           <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
           </svg>
-          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+          <h3 class="text-lg font-medium text-[var(--text-primary)]">
               {searchQuery ? 'No matching notes found' : 'No notes yet'}
           </h3>
           <p class="mt-2 text-gray-500 dark:text-gray-400">
@@ -144,26 +144,29 @@
                   class="flex items-stretch bg-(--border-color)] rounded-lg border-[var(--border-color)]  hover:scale-102 transition-transform duration-400 cursor-pointer shadow-sm hover:shadow"
                   transition:fade={{ duration: 150 }}
               >
-                  <!-- Attached Node Status -->
-                  <div class="w-16 flex-shrink-0 {note.attachedNodes?.length ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-[var(--bg-secondary)]'} flex flex-col items-center justify-center p-2 border-r border-[var(--border-color)]">
-                      {#if note.attachedNodes?.length}
-                          <div class="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center mb-1">
-                              <svg class="w-4 h-4 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                              </svg>
-                          </div>
-                          <span class="text-xs text-center font-medium text-blue-600 dark:text-blue-300">
-                              {note.attachedNodes.length} {note.attachedNodes.length === 1 ? 'node' : 'nodes'}
-                          </span>
-                      {:else}
-                          <div class="h-8 w-8 rounded-full bg-transparent flex items-center justify-center mb-1">
-                              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                              </svg>
-                          </div>
-                          <span class="text-xs text-center font-medium text-gray-500">No nodes</span>
-                      {/if}
+                <!-- Attached Node Status -->
+                <div 
+                class="w-16 flex-shrink-0 {note.attachedNodes?.length ? 'bg-green-50 dark:bg-green-900/30' : 'bg-[var(--bg-secondary)]'} 
+                flex flex-col items-center justify-center p-2 border-r border-[var(--border-color)] rounded-lg"
+              >
+                {#if note.attachedNodes?.length > 0}  <!-- Changed to explicit length check -->
+                  <div class="h-8 w-8 rounded-full bg-green-50 dark:bg-green-600/30 flex items-center justify-center mb-1">
+                    <svg class="w-4 h-4 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                    </svg>
                   </div>
+                  <span class="text-xs text-center font-medium text-green-600 dark:text-green-300">
+                    {note.attachedNodes.length} {note.attachedNodes.length === 1 ? 'node' : 'nodes'}
+                  </span>
+                {:else}
+                  <div class="h-8 w-8 rounded-full bg-transparent flex items-center justify-center mb-1">
+                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                    </svg>
+                  </div>
+                  <span class="text-xs text-center font-medium text-gray-500">No nodes</span>
+                {/if}
+              </div>
 
                   <!-- Note Content -->
                   <div class="flex-1 p-4">
@@ -197,7 +200,7 @@
                           <div class="flex flex-wrap gap-1 mt-3">
                               {#each note.attachedNodes as node, i}
                                   {#if i < 3}
-                                      <span class="px-2 py-0.5 bg-[var(--bg-primary)] text-blue-700 dark:text-blue-300 rounded-full text-xs">
+                                      <span class="px-2 py-0.5 bg-[var(--bg-primary)] text-green-900 dark:text-green-300 rounded-full text-xs">
                                           @{node.title}
                                       </span>
                                   {:else if i === 3}

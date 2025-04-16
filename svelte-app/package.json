@@ -54,6 +54,7 @@
 		"@types/uuid": "^10.0.0",
 		"drawflow": "^0.0.60",
 		"lucide-svelte": "^0.487.0",
+		"marked": "^15.0.8",
 		"svelte-dnd-action": "^0.9.60",
 		"uuid": "^11.1.0"
 	}
