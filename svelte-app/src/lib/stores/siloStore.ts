@@ -839,12 +839,16 @@ export async function executeNode(siloId: string, nodeId: string) {
           ...s,
           nodes: s.nodes.map(n => {
             if (n.id !== nodeId) return n;
+            
+            // Only update status if it's not "not-started"
+            const newStatus = n.data.status !== 'not-started' ? 'completed' : n.data.status;
+            
             return {
               ...n,
               data: { 
                 ...n.data, 
                 isRunning: false,
-                isComplete: true,
+                status: newStatus,
                 result,
                 lastRun: new Date().toISOString()
               }

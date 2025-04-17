@@ -811,28 +811,32 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
 
   <!-- Status Indicators -->
   {#if node.data.isRunning}
-    <div class="node-running-indicator" transition:fade={{ duration: 200 }}>
-      <div class="spinner"></div>
-    </div>
-  {/if}
-
-  {#if node.data.isComplete}
-    <div class="node-complete-indicator" transition:fade={{ duration: 200 }}>
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20 6L9 17l-5-5"></path>
-      </svg>
-    </div>
-  {/if}
-
-  {#if node.data.error}
-    <div class="node-error-indicator" transition:fade={{ duration: 200 }}>
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-      </svg>
-    </div>
-  {/if}
+  <div class="node-running-indicator" transition:fade={{ duration: 200 }}>
+    <div class="spinner"></div>
+  </div>
+{:else if node.data.status === 'not-started'}
+  <div class="node-error-indicator" transition:fade={{ duration: 200 }}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+  </div>
+{:else if node.data.status === 'completed' || (node.data.isComplete && node.data.status !== 'not-started')}
+  <div class="node-complete-indicator" transition:fade={{ duration: 200 }}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 6L9 17l-5-5"></path>
+    </svg>
+  </div>
+{:else if node.data.error}
+  <div class="node-error-indicator" transition:fade={{ duration: 200 }}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+  </div>
+{/if}
   <!-- Input port (left side) -->
   {#if shouldHaveInputPort(node.type)}
     <div 
