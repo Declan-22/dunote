@@ -19,6 +19,7 @@ export type NodeType =
   'apiKey' | 'oauth' |
   // Advanced nodes
   'code' | 'condition';
+  
 
 // Define node icons and metadata
 export const NODE_TYPES: Record<NodeType, { 

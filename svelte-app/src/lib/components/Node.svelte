@@ -484,21 +484,50 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   
   // Save the edited title
   async function saveTitle() {
+  // Prevent empty titles
+  if (!newTitle.trim()) {
+    newTitle = safeTitle;
+    isEditingTitle = false;
+    return;
+  }
+  
+  isEditingTitle = false;
+  
+  // Create a deep copy of the node data
+  const updatedData = JSON.parse(JSON.stringify(node.data || {}));
+  updatedData.title = newTitle.trim();
+  
+  try {
+    // First update the local store synchronously
+    siloStore.update(stores => {
+      return stores.map(s => {
+        if (s.id !== siloId) return s;
+        return {
+          ...s,
+          nodes: s.nodes.map(n => {
+            if (n.id !== node.id) return n;
+            return {
+              ...n,
+              data: updatedData
+            };
+          })
+        };
+      });
+    });
+
+    // Then sync with database
     const { error } = await supabase
       .from('nodes')
-      .update({ title: editedTitle })
+      .update({ data: updatedData })
       .eq('id', node.id);
 
-    if (!error) {
-      siloStore.update(store => store.map(silo => ({
-        ...silo,
-        nodes: silo.nodes.map(n => 
-          n.id === node.id ? { ...n, data: { ...n.data, title: editedTitle } } : n
-        )
-      })));
-    }
-    isEditingTitle = false;
+    if (error) throw error;
+    
+    console.log('Title updated successfully:', newTitle);
+  } catch (err) {
+    console.error('Failed to update node title:', err);
   }
+}
   
   // Handle title input keydown
   function handleTitleKeydown(e: KeyboardEvent) {
@@ -525,11 +554,18 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   
   // Update node status
   function updateStatus(status: string) {
-    dispatch('updatestatus', { 
-      nodeId: node.id, 
-      status: status 
+    dispatch('updatenode', { 
+      nodeId: node.id,
+      updates: {
+        data: {
+          ...node.data,
+          status: status,
+          updated_at: new Date().toISOString()
+        }
+      }
     });
     isStatusDropdownOpen = false;
+    dispatch('update'); // Trigger output refresh
   }
   
   // Resource specific actions
@@ -899,6 +935,14 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
         <span>{safeTitle}</span>
         <button class="close-btn" on:click|stopPropagation={closeContextMenu}>×</button>
       </div>
+    {#if node.type === 'resource'}
+      <div class="menu-section">
+        <div class="menu-item" on:click|stopPropagation={() => executeFunction('update_resource')}>
+          <svg><!-- document icon --></svg>
+          <span>Update Source</span>
+        </div>
+      </div>
+      {/if}
       
       <div class="menu-section">
         <div class="menu-item" on:click|stopPropagation={handleEditTitle}>
@@ -974,6 +1018,28 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
       </div>
     </div>
   {/if}
+
+  <!-- Add this section for resource input -->
+{#if node.type === 'resource' && isNodePanelOpen}
+<div class="resource-panel">
+  <div class="form-group">
+    <label>Source Title</label>
+    <input 
+      type="text" 
+      bind:value={node.data.sourceTitle}
+      placeholder="Enter source title"
+    />
+  </div>
+  <div class="form-group">
+    <label>Source URL/Content</label>
+    <textarea
+      bind:value={node.data.sourceContent}
+      placeholder="Paste URL or content"
+    />
+  </div>
+  <button on:click|stopPropagation={saveResource}>Save Source</button>
+</div>
+{/if}
   
   <!-- Comment input popup -->
   {#if isAddingComment}

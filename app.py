@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 import logging
 from supabase import create_client, Client
+from flask import request, jsonify  # Add missing imports
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -626,6 +627,23 @@ async def batch_create_tasks(text: str, silo_id: Optional[str] = None):
     
     save_to_file()
     return created_tasks
+
+@app.route('/api/extract', methods=['POST'])
+def handle_extract():
+    data = request.get_json()
+    processor = TaskProcessor()
+    result = processor.extract_quotes(
+        data.get('content', ''),
+        data.get('thesis', '')
+    )
+    return jsonify(result)
+
+@app.route('/api/summarize', methods=['POST'])
+def handle_summarize():
+    data = request.get_json()
+    processor = TaskProcessor()
+    result = processor.summarize_content(data.get('content', ''))
+    return jsonify(result)
 
 if __name__ == "__main__":
     import uvicorn

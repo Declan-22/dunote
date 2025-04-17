@@ -1001,3 +1001,27 @@ class TaskProcessor:
         explanation = re.sub(r'^[,.:;-]\s*', '', explanation)  # Remove leading punctuation
         
         return is_completed, explanation
+
+
+def extract_quotes(content: str, thesis: str) -> dict:
+    """Extract relevant quotes using Deepseek"""
+    prompt = f"""Extract 3-5 most relevant quotes from this content that support the thesis: {thesis}
+    
+    Content:
+    {content[:3000]}  # Truncate to fit context window
+    
+    Respond in JSON format: {{ "quotes": [], "thesis": "...", "analysis": "..." }}"""
+    
+    response = self._call_model(prompt)
+    return self._parse_json(response)
+
+def summarize_content(content: str) -> dict:
+    """Generate summary using Deepseek"""
+    prompt = f"""Summarize this content into 3 key points:
+    
+    {content[:3000]}
+    
+    Respond in JSON format: {{ "summary": "...", "key_points": [] }}"""
+    
+    response = self._call_model(prompt)
+    return self._parse_json(response)

@@ -1,10 +1,11 @@
 import { writable, get, derived } from 'svelte/store';
-import type { NodeType, NodeData } from '$lib/types/nodes';
+import type { NodeType } from '$lib/types/nodes';
 import { browser } from '$app/environment';
 import { validateNodeConnections } from '$lib/utils/nodeUtils';
 import { NODE_TYPES } from '$lib/types/nodes';
 import { nodeUtils } from '$lib/utils/nodeUtils';
 import { goto } from '$app/navigation';
+
 
 export type Position = { x: number; y: number };
 export type SiloNodeId = string;
@@ -21,6 +22,8 @@ export interface ConnectionPoint {
 
 
 export interface SiloNode {
+  updated_at: string;
+  created_at: string;
   id: SiloNodeId;
   type: NodeType;
   position: { x: number; y: number };
@@ -168,13 +171,11 @@ function createDefaultSilo(): Silo {
       type: 'project',
       position: { x: 400, y: 200 },
       data: { title: 'Main Project', description: 'Manage project workflow' },
-      siloId
+      siloId,
+      updated_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     }],
     edges: [],
-    viewState: {
-      zoom: 1,
-      pan: { x: 0, y: 0 }
-    }
   };
 }
 
@@ -189,6 +190,8 @@ export function createNode(type: NodeType, siloId: string, position: Position): 
     id: crypto.randomUUID(),
     type,
     position,
+    updated_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
     siloId,
     data: {
       title: NODE_TYPES[type].name, // Default title
@@ -601,17 +604,141 @@ export function propagateData(siloId: string, nodeId: string, outputData: any) {
   });
 }
 
-export function executeNodeFunction(siloId: string, nodeId: string, functionId: string) {
+function getConnectedResource(nodeId: string, siloId: string): SiloNode | null {
+  const silo = get(siloStore).find(s => s.id === siloId);
+  if (!silo) return null;
+
+  // Find first connected resource node
+  const connection = silo.edges.find(e => 
+    e.source === nodeId && 
+    silo.nodes.find(n => n.id === e.target)?.type === 'resource'
+  );
+
+  if (!connection) return null;
+  return silo.nodes.find(n => n.id === connection.target) || null;
+}
+
+export async function executeNodeFunction(siloId: string, nodeId: string, functionId: string) {
+  console.log(`Executing ${Function} on node ${nodeId} in silo ${siloId}`);
   const stores = get(siloStore);
   const silo = stores.find(s => s.id === siloId);
   if (!silo) return;
-  
+
   const node = silo.nodes.find(n => n.id === nodeId);
   if (!node) return;
-  
+
   let result;
-  function extractQuotes(node: SiloNode): any {
-    return { quotes: [] };
+  
+  // 4. Add async to the function and fix missing title
+  const processExtract = async (node: SiloNode) => {
+    const resourceNode = getConnectedResource(node.id, siloId);
+    if (!resourceNode) return;
+    
+    const response = await fetch('/api/extract', {
+      method: 'POST',
+      body: JSON.stringify({
+        content: resourceNode.data.sourceContent,
+        thesis: node.data.thesis
+      })
+    });
+    
+    const result = await response.json();
+    updateNode(siloId, node.id, { 
+      data: {
+        ...node.data, // Preserve existing data
+        title: node.data.title, // Ensure title exists
+        result 
+      }
+    });
+  };
+
+  const processSummarize = async (node: SiloNode) => {
+    const resourceNode = getConnectedResource(node.id, siloId);
+    if (!resourceNode) return;
+    
+    const response = await fetch('/api/summarize', {
+      method: 'POST',
+      body: JSON.stringify({
+        content: resourceNode.data.sourceContent
+      })
+    });
+    
+    const result = await response.json();
+    updateNode(siloId, node.id, { 
+      data: {
+        ...node.data,
+        title: node.data.title,
+        result 
+      }
+    });
+  };
+
+async function processFunction(functionId: string, node: SiloNode, silo: Silo, siloId: string, nodeId: string) {
+    let result;
+  
+    switch (functionId) {
+      case 'extract_quotes': {
+        const resourceContent = node.data.sourceContent || node.data.content;
+        if (!resourceContent) {
+          return { error: "No content available for extraction" };
+        }
+  
+        try {
+          const response = await fetch('/api/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: resourceContent,
+              count: 2,
+            })
+          });
+  
+          if (!response.ok) throw new Error('Extraction API failed');
+          const result = await response.json();
+  
+          updateNode(siloId, nodeId, {
+            data: {
+              ...node.data,
+              result: {
+                ...node.data.result,
+                quotes: result.quotes
+              }
+            }
+          });
+  
+          return result;
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : "Unknown error" };
+        }
+      }
+  
+      case 'summarize':
+        await processSummarize(node);
+        break;
+  
+      case 'run':
+        result = processNodeRun(node, silo);
+        break;
+  
+      case 'generate_citations':
+        result = generateCitations(node);
+        break;
+  
+      case 'add_subtask':
+        result = {
+          subtasks: [...(node.data.subtasks || []), createDefaultSubtask()]
+        };
+        break;
+  
+      case 'check_requirements':
+        result = checkRequirements(node, silo);
+        break;
+  
+      default:
+        result = { message: "Function not implemented" };
+    }
+  
+    return result;
   }
   
   function summarizeContent(node: SiloNode): any {
@@ -629,28 +756,7 @@ export function executeNodeFunction(siloId: string, nodeId: string, functionId: 
   function checkRequirements(node: SiloNode, silo: Silo): any {
     return { requirementsMet: false };
   }
-  switch(functionId) {
-    case 'run':
-      result = processNodeRun(node, silo);
-      break;
-    case 'extract_quotes':
-      result = extractQuotes(node);
-      break;
-    case 'summarize':
-      result = summarizeContent(node);
-      break;
-    case 'generate_citations':
-      result = generateCitations(node);
-      break;
-    case 'add_subtask':
-      result = { subtasks: [...(node.data.subtasks || []), createDefaultSubtask()] };
-      break;
-    case 'check_requirements':
-      result = checkRequirements(node, silo);
-      break;
-    default:
-      result = { message: "Function not implemented" };
-  }
+
   
   // Update the node with the result and propagate data
   updateNode(siloId, nodeId, { 
@@ -788,8 +894,8 @@ export async function executeNode(siloId: string, nodeId: string) {
       );
     }
   } catch (error) {
-    // Handle errors
-    console.error(`Error executing node ${nodeId}:`, error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error executing node ${nodeId}:`, errorMessage);
     
     // Mark node as failed
     siloStore.update(store => 
@@ -803,9 +909,7 @@ export async function executeNode(siloId: string, nodeId: string) {
               ...n,
               data: { 
                 ...n.data, 
-                isRunning: false,
-                isComplete: false,
-                error: error.message || 'Unknown error'
+                error: errorMessage
               }
             };
           })
@@ -1511,4 +1615,7 @@ export const nodeConnections = derived(siloStore, ($store: Silo[]) => {
     }))
   );
 });
+
+
+
 

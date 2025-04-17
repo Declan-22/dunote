@@ -140,20 +140,7 @@
   console.log("Port hover:", nodeId, isOutput ? "output" : "input");
 }
 
-  function debugConnectionStart(event) {
-  console.log('%c CONNECTION START ', 'background: green; color: white', {
-    nodeId: event.detail.nodeId,
-    isOutput: event.detail.isOutput,
-    position: event.detail.position
-  });
-  
-  debugConnectionAttempts.push({
-    startTime: new Date(),
-    startNode: event.detail.nodeId,
-    startIsOutput: event.detail.isOutput,
-    complete: false
-  });
-}
+
 
   // Connection drawing handlers
   function handleConnectionStart(event: CustomEvent) {
@@ -183,43 +170,7 @@
   event.preventDefault && event.preventDefault();
 }
 
-// Call this at the beginning of handleConnectionEnd
-function debugConnectionEnd(event) {
-  console.log('%c CONNECTION END ', 'background: blue; color: white', {
-    nodeId: event.detail.nodeId,
-    isOutput: event.detail.isOutput
-  });
-  
-  // Find the last incomplete connection attempt
-  const lastAttempt = [...debugConnectionAttempts].reverse().find(a => !a.complete);
-  if (lastAttempt) {
-    lastAttempt.endNode = event.detail.nodeId;
-    lastAttempt.endIsOutput = event.detail.isOutput;
-    lastAttempt.complete = true;
-    lastAttempt.endTime = new Date();
-    lastAttempt.duration = lastAttempt.endTime - lastAttempt.startTime;
-    
-    // Now analyze if this should create a valid connection
-    const shouldCreateConnection = 
-      lastAttempt.startNode !== lastAttempt.endNode && // Different nodes
-      ((lastAttempt.startIsOutput && !lastAttempt.endIsOutput) || // Output to input
-       (!lastAttempt.startIsOutput && lastAttempt.endIsOutput));  // Input to output
-    
-    lastAttempt.shouldCreateConnection = shouldCreateConnection;
-    
-    if (shouldCreateConnection) {
-      console.log('%c SHOULD CREATE CONNECTION ', 'background: purple; color: white', {
-        source: lastAttempt.startIsOutput ? lastAttempt.startNode : lastAttempt.endNode,
-        target: lastAttempt.startIsOutput ? lastAttempt.endNode : lastAttempt.startNode
-      });
-    } else {
-      console.log('%c INVALID CONNECTION ', 'background: red; color: white', {
-        reason: lastAttempt.startNode === lastAttempt.endNode ? 
-          "Same node" : "Both inputs or both outputs"
-      });
-    }
-  }
-}
+
 
 function handleConnectionEnd(event: CustomEvent) {
   if (!isDrawingConnection || !connectionStartNode) {
