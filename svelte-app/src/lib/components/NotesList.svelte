@@ -141,77 +141,77 @@
           {#each notes as note (note.id)}
               <div
                   on:click={() => handleNoteClick(note)}
-                  class="flex items-stretch bg-(--border-color)] rounded-lg border-[var(--border-color)]  hover:scale-102 transition-transform duration-400 cursor-pointer shadow-sm hover:shadow"
+                  class="flex items-stretch bg-[var(--border-color)] rounded-lg border-[var(--border-color)]  hover:scale-102 transition-transform duration-400 cursor-pointer shadow-sm hover:shadow"
                   transition:fade={{ duration: 150 }}
               >
                 <!-- Attached Node Status -->
                 <div 
-                class="w-16 flex-shrink-0 {note.attachedNodes?.length ? 'bg-green-50 dark:bg-green-900/30' : 'bg-[var(--bg-secondary)]'} 
+                class="w-16 flex-shrink-0 {note.attachedNodes?.length ? 'bg-[var(--brand-green-accent)]' : 'bg-[var(--bg-secondary)]'} 
                 flex flex-col items-center justify-center p-2 border-r border-[var(--border-color)] rounded-lg"
               >
-                {#if note.attachedNodes?.length > 0}  <!-- Changed to explicit length check -->
-                  <div class="h-8 w-8 rounded-full bg-green-50 dark:bg-green-600/30 flex items-center justify-center mb-1">
-                    <svg class="w-4 h-4 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                {#if note.attachedNodes?.length > 0}
+                    <div class="h-8 w-8 rounded-full bg-[var(--node-icon-bg)] flex items-center justify-center mb-1">
+                    <svg class="w-4 h-4 text-[var(--text-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                     </svg>
-                  </div>
-                  <span class="text-xs text-center font-medium text-green-600 dark:text-green-300">
+                    </div>
+                    <span class="text-xs text-center font-medium text-[var(--text-accent)]">
                     {note.attachedNodes.length} {note.attachedNodes.length === 1 ? 'node' : 'nodes'}
-                  </span>
+                    </span>
                 {:else}
-                  <div class="h-8 w-8 rounded-full bg-transparent flex items-center justify-center mb-1">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                    <div class="h-8 w-8 rounded-full bg-transparent flex items-center justify-center mb-1">
+                    <svg class="w-4 h-4 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                     </svg>
-                  </div>
-                  <span class="text-xs text-center font-medium text-gray-500">No nodes</span>
+                    </div>
+                    <span class="text-xs text-center font-medium text-[var(--text-secondary)]">No nodes</span>
                 {/if}
-              </div>
+                </div>
 
-                  <!-- Note Content -->
-                  <div class="flex-1 p-4">
-                      <h3 class="text-lg font-medium text-[var(--text-primary)]">{note.title || 'Untitled Note'}</h3>
-                      
-                      {#if note.content}
-                          <p class="text-[var(--text-secondary)] text-sm mt-1 opacity-70 line-clamp-1">
-                              {note.content.replace(/<[^>]*>?/gm, '')}
-                          </p>
-                      {/if}
-                      
-                      <div class="flex mt-2 text-xs text-[var(--text-secondary)] space-x-4">
-                          <span class="flex items-center">
-                              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                              </svg>
-                              Created: {new Date(note.created_at).toLocaleDateString()}
-                          </span>
-                          {#if note.updated_at !== note.created_at}
-                              <span class="flex items-center">
-                                  <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                  </svg>
-                                  Modified: {new Date(note.updated_at).toLocaleDateString()}
-                              </span>
-                          {/if}
-                      </div>
+                <!-- Note Content -->
+                <div class="flex-1 p-4">
+                <h3 class="text-lg font-medium text-[var(--text-primary)]">{note.title || 'Untitled Note'}</h3>
+                
+                {#if note.content}
+                    <p class="text-[var(--text-secondary)] text-sm mt-1 opacity-70 line-clamp-1">
+                    {note.content.replace(/<[^>]*>?/gm, '')}
+                    </p>
+                {/if}
+                
+                <div class="flex mt-2 text-xs text-[var(--text-secondary)] space-x-4">
+                    <span class="flex items-center">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    Created: {new Date(note.created_at).toLocaleDateString()}
+                    </span>
+                    {#if note.updated_at !== note.created_at}
+                    <span class="flex items-center">
+                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Modified: {new Date(note.updated_at).toLocaleDateString()}
+                    </span>
+                    {/if}
+                </div>
 
-                      <!-- Attached Nodes Pills -->
-                      {#if note.attachedNodes?.length > 0}
-                          <div class="flex flex-wrap gap-1 mt-3">
-                              {#each note.attachedNodes as node, i}
-                                  {#if i < 3}
-                                      <span class="px-2 py-0.5 bg-[var(--bg-primary)] text-green-900 dark:text-green-300 rounded-full text-xs">
-                                          @{node.title}
-                                      </span>
-                                  {:else if i === 3}
-                                      <span class="px-2 py-0.5 bg-[var(--bg-primary)] text-gray-700 dark:text-gray-300 rounded-full text-xs">
-                                          +{note.attachedNodes.length - 3} more
-                                      </span>
-                                  {/if}
-                              {/each}
-                          </div>
-                      {/if}
-                  </div>
+                <!-- Attached Nodes Pills -->
+                {#if note.attachedNodes?.length > 0}
+                    <div class="flex flex-wrap gap-1 mt-3">
+                    {#each note.attachedNodes as node, i}
+                        {#if i < 3}
+                        <span class="px-2 py-0.5 bg-[var(--pill-bg)] text-[var(--text-accent)] rounded-full text-xs">
+                            @{node.title}
+                        </span>
+                        {:else if i === 3}
+                        <span class="px-2 py-0.5 bg-[var(--pill-bg)] text-[var(--text-secondary)] rounded-full text-xs">
+                            +{note.attachedNodes.length - 3} more
+                        </span>
+                        {/if}
+                    {/each}
+                    </div>
+                {/if}
+                </div>
 
                   <!-- Settings Menu -->
                   <div class="w-10 flex-shrink-0 flex items-center justify-center relative border-l border-[var(--bg-secondary)]">

@@ -116,6 +116,36 @@
   }
 
   
+  function getPriorityStyle(priority: string): string {
+  let bgColor, textColor, borderColor;
+  
+  switch(priority?.toLowerCase()) {
+    case 'urgent':
+      bgColor = 'var(--bg-primary)';
+      textColor = '#ab0909'; // red-700
+      borderColor = '#7d0707'; // red-500
+      break;
+    case 'high':
+      bgColor = 'var(--bg-primary)';
+      textColor = '#f23838'; // red-600
+      borderColor = '#c22121'; // orange-500
+      break;
+    case 'medium':
+      bgColor = 'var(--bg-primary)';
+      textColor = '#A16207'; // amber-700
+      borderColor = '#F59E0B'; // amber-500
+      break;
+    case 'low':
+    default:
+      bgColor = 'var(--bg-primary)';
+      textColor = '#047857'; // emerald-700
+      borderColor = '#10B981'; // emerald-500
+      break;
+  }
+  
+  return `border-color: ${borderColor}; color: ${textColor}; background-color: ${bgColor};`;
+}
+  
 
   async function updateResourceContent(nodeId: string, newContent: string, newTitle: string) {
   const node = silo?.nodes.find(n => n.id === nodeId);
@@ -204,17 +234,24 @@ function saveResourceEdit() {
 
   
 
-  function getPriorityClass(priority: string) {
-    switch(priority?.toLowerCase()) {
-      case 'high':
-      case 'urgent':
-        return 'bg-red-100 text-red-800';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800';
-      default:
-        return 'bg-green-100 text-green-800';
-    }
+function getPriorityClass(priority: string) {
+  // Handle null or undefined priority gracefully
+  if (!priority) return 'bg-gray-100 text-gray-800';
+  
+  // Normalize the priority string and check
+  switch(priority.toLowerCase().trim()) {
+    case 'high':
+      return 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-100';
+    case 'urgent':
+      return 'bg-red-300 text-red-800 dark:bg-red-900 dark:text-red-100';
+    case 'medium':
+      return 'bg-amber-200 text-amber-800 dark:bg-amber-900 dark:text-amber-100';
+    case 'low':
+      return 'bg-emerald-200 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100';
+    default:
+      return 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
   }
+}
 
   function updateNode(siloId: string, nodeId: string, updates: any) {
   // Update node in local store
@@ -598,7 +635,7 @@ function extractQuotes(quote: string) { // Add type annotation
         <!-- Priority Tasks Column -->
         <div class="col-span-2 space-y-5">
           <div class="rounded-xl border p-4"
-              style="background-color: var(--bg-primary); border-color: var(--border-color)">
+              style="background-color: [var(--bg-primary)]; border-color: var(--border-color)">
             <div class="flex justify-between items-center mb-4">
               <h2 class="font-medium" style="color: var(--text-primary)">Workflow Progress</h2>
               <span 
@@ -618,23 +655,54 @@ function extractQuotes(quote: string) { // Add type annotation
 
             <!-- Task Cards -->
             {#each filteredTasks as node (node.id)}
-              <div class="task-node mb-3">
-                <div class="border border-gray-100 rounded-lg p-3 hover:shadow-sm transition" 
-                     class:bg-gradient-to-r={getNodePriority(node) === 'high'}
-                     class:from-red-50={getNodePriority(node) === 'high'} 
-                     class:to-white={getNodePriority(node) === 'high'}
-                     class:from-yellow-50={getNodePriority(node) === 'medium'}
-                     class:from-green-50={getNodePriority(node) === 'low'}>
-                  <div class="flex items-start justify-between">
-                    <div class="flex items-start space-x-3">
-                      <div class="mt-0.5">
-                        <input 
-                          type="checkbox" 
-                          checked={node.data.isComplete}
-                          on:change={() => toggleNodeCompletion(node)}
-                          class="w-4 h-4 rounded"
-                          style="border-color: var(--text-color)"
+
+            <div class="task-node mb-3">
+              <div class="border border-[var(--border-color)] rounded-lg p-3 hover:shadow-sm transition relative overflow-hidden" 
+                   data-priority={getNodePriority(node)}>
+                <div class="priority-indicator absolute left-0 top-0 bottom-0 w-2 opacity-80"
+                     class:bg-red-500={getNodePriority(node) === 'urgent'} 
+                     class:bg-red-400={getNodePriority(node) === 'high'} 
+                     class:bg-amber-400={getNodePriority(node) === 'medium'}
+                     class:bg-emerald-400={getNodePriority(node) === 'low'}>
+                </div>
+                <div class="bg-gradient-to-r absolute inset-0 z-0 opacity-10 dark:opacity-5"
+                     class:from-red-500={getNodePriority(node) === 'urgent'} 
+                     class:from-red-400={getNodePriority(node) === 'high'} 
+                     class:from-amber-400={getNodePriority(node) === 'medium'}
+                     class:from-emerald-400={getNodePriority(node) === 'low'}>
+                </div>
+                <div class="flex items-start justify-between relative z-10">
+                  <div class="flex items-start space-x-3">
+
+
+
+                      <div class="mt-0.5 relative">
+                        <div 
+                          class="w-4 h-4 rounded cursor-pointer border-1 border-[var(--neutral-500)] flex items-center justify-center {node.data.isComplete ? 'bg-[var(--brand-green-light)] border-[var(--brand-green)]' : 'bg-transparent'}"
+                          on:click={() => toggleNodeCompletion(node)}
+                          on:keypress={(e) => e.key === 'Enter' && toggleNodeCompletion(node)}
+                          tabindex="0"
+                          role="checkbox"
+                          aria-checked={node.data.isComplete}
                         >
+                          {#if node.data.isComplete}
+                            <svg 
+                              width="12" 
+                              height="12" 
+                              viewBox="0 0 24 24" 
+                              fill="none" 
+                              class="text-white"
+                            >
+                              <path 
+                                d="M5 13l4 4L19 7" 
+                                stroke="currentColor" 
+                                stroke-width="3" 
+                                stroke-linecap="round" 
+                                stroke-linejoin="round"
+                              />
+                            </svg>
+                          {/if}
+                        </div>
                       </div>
                       <div>
                         <h3 class="font-medium" style="color: var(--text-primary)">{safeNodeTitle(node)}</h3>
@@ -660,14 +728,15 @@ function extractQuotes(quote: string) { // Add type annotation
                     </div>
                     <div class="relative group">
                       <select
-                        class="{getPriorityClass(getNodePriority(node))} px-2 py-0.5 rounded text-xs font-medium ml-2"
-                        value={getNodePriority(node)}
-                        on:change={(e) => updatePriority(node, (e.target as HTMLInputElement).value)}
-                        >
-                        {#each ['low', 'medium', 'high', 'urgent'] as priority}
-                          <option value={priority}>{priority}</option>
-                        {/each}
-                      </select>
+                      value={getNodePriority(node)}
+                      on:change={(e) => updatePriority(node, (e.target as HTMLInputElement).value)}
+                      class="text-sm border rounded-md px-2 py-1 ml-2"
+                      style={getPriorityStyle(getNodePriority(node))}
+                    >
+                      {#each ['low', 'medium', 'high', 'urgent'] as priority}
+                        <option value={priority}>{priority}</option>
+                      {/each}
+                    </select>
                     </div>
                   </div>
 
@@ -679,7 +748,7 @@ function extractQuotes(quote: string) { // Add type annotation
                     )
                   ) as resourceNode}
                     <div class="ml-7 mt-3">
-                      <div class="bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-2">
+                      <div class="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg p-2.5 mb-2">
                         <div class="flex justify-between items-center mb-1">
                           <div class="text-xs uppercase tracking-wide text-gray-400">Resource</div>
                           <button class="text-xs text-gray-400 hover:text-gray-600">
@@ -688,18 +757,18 @@ function extractQuotes(quote: string) { // Add type annotation
                             </svg>
                           </button>
                         </div>
-                        <h4 class="text-sm font-medium text-gray-700">{safeNodeTitle(resourceNode)}</h4>
+                        <h4 class="text-sm font-medium text-[var(--text-secondary)]">{safeNodeTitle(resourceNode)}</h4>
                         {#if resourceNode.data.result?.summary}
-                          <div class="mt-2 bg-white border border-gray-200 rounded-lg p-2 text-xs">
+                          <div class="mt-2 bg-[var(--bg-accenttwo)] border border-[var(--border-color)] rounded-lg p-2 text-xs">
                             <div class="flex justify-between items-center mb-1">
                               <div class="uppercase tracking-wide text-gray-400">Summary</div>
-                              <span class="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full">
+                              <span class="text-[10px] bg-[var(--bg-secondary)] text-green-600 px-1.5 py-0.5 rounded-full">
                                 AI Generated
                               </span>
                             </div>
                             <p class="text-gray-600">{resourceNode.data.result.summary}</p>
                             {#if resourceNode.data.result?.url}
-                              <a href={resourceNode.data.result.url} class="mt-1 text-indigo-600 hover:underline block">View Source</a>
+                              <a href={resourceNode.data.result.url} class="mt-1 text-green-600 hover:underline block">View Source</a>
                             {/if}
                           </div>
                         {/if}
@@ -740,13 +809,13 @@ function extractQuotes(quote: string) { // Add type annotation
 
                   <div class="flex justify-between items-center mt-3 ml-7">
                     <div class="flex space-x-2">
-                      <button class="text-xs flex items-center text-gray-500 hover:text-gray-700">
+                      <button class="text-xs flex items-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all duration-200">
                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
                         </svg>
                         Add Subtask
                       </button>
-                      <button class="text-xs flex items-center text-gray-500 hover:text-gray-700">
+                      <button class="text-xs flex items-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all duration-200">
                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
@@ -760,14 +829,14 @@ function extractQuotes(quote: string) { // Add type annotation
             {/each}
 
             <div class="text-center mt-4">
-              <button class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">View all tasks</button>
+              <button class="text-sm text-[var(--brand-green-light)] hover:text-[var(--brand-green)] transition-all duration-200 font-medium">View all tasks</button>
             </div>
           </div>
 
           <!-- Upcoming Tasks -->
-          <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div class="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-color)] p-4 shadow-sm">
             <div class="flex justify-between items-center mb-4">
-              <h2 class="font-medium text-gray-800">Upcoming Tasks</h2>
+              <h2 class="font-medium text-[var(--text-primary)]">Upcoming Tasks</h2>
               <button class="text-xs text-gray-500 hover:text-gray-700">View calendar</button>
             </div>
             
@@ -816,10 +885,10 @@ function extractQuotes(quote: string) { // Add type annotation
                 <div class="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg"
                      style="background-color: var(--bg-secondary)">
                   <div class="flex items-center">
-                    <div class="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                    <span class="text-sm text-gray-700">{safeNodeTitle(project)}</span>
+                    <div class="w-3 h-3 bg-[var(--brand-green-light)] rounded-full mr-2"></div>
+                    <span class="text-sm text-[var(--text-secondary)]">{safeNodeTitle(project)}</span>
                   </div>
-                  <span class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                  <span class="text-xs bg-[var(--bg-accenttwo)] text-green-700 px-2 py-0.5 rounded-full">
                     {project.data.result?.progress || 0}%
                   </span>
                 </div>
@@ -832,14 +901,14 @@ function extractQuotes(quote: string) { // Add type annotation
           </div>
 
           <!-- Resources Section -->
-          <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div class="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-color)] p-4 shadow-sm">
             <div class="flex justify-between items-center mb-4">
-              <h2 class="font-medium text-gray-800">Recent Resources</h2>
+              <h2 class="font-medium text-[var(--text-primary)]">Recent Resources</h2>
               <button class="text-xs text-gray-500 hover:text-gray-700">View all</button>
             </div>
             <button 
               on:click={() => openResourceEditor(resourceNode.id)}
-              class="text-xs text-indigo-600 hover:text-indigo-800 flex items-center mt-2"
+              class="text-xs text-[var(--brand-green-light)] hover:text-[var(--brand-green)] transition-all duration-200 flex items-center mt-2 mb-2"
             >
               <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
@@ -849,14 +918,14 @@ function extractQuotes(quote: string) { // Add type annotation
             
             <div class="space-y-3">
               {#each resourceNodes.slice(0, 3) as resource}
-                <div class="border border-gray-200 rounded-lg p-3 hover:shadow-sm transition">
+                <div class="border border-[var(--border-color)] rounded-lg p-3 hover:shadow-sm transition">
                   <div class="flex justify-between items-center mb-1">
                     <div class="text-xs uppercase tracking-wide text-gray-400">Resource</div>
-                    <span class="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                    <span class="text-[10px] bg-transparent text-gray-500 px-1.5 py-0.5 rounded-full">
                       {formatTimeAgo(resource.updated_at)}
                     </span>
                   </div>
-                  <h4 class="text-sm font-medium text-gray-700">{safeNodeTitle(resource)}</h4>
+                  <h4 class="text-sm font-medium text-[var(--text-secondary)]">{safeNodeTitle(resource)}</h4>
                   {#if resource.data.result?.url}
                     <a href={resource.data.result.url} class="text-xs text-indigo-600 hover:underline mt-1 block">
                       View Source

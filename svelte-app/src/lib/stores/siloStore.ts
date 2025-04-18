@@ -673,6 +673,28 @@ export async function executeNodeFunction(siloId: string, nodeId: string, functi
     });
   };
 
+  async function saveNodeToDatabase(node: SiloNode) {
+    if (!$user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('nodes')
+        .insert({
+          id: node.id,
+          silo_id: siloId,
+          type: node.type,
+          position: node.position,
+          data: node.data,
+          user_id: $user.id,
+          updated_at: new Date().toISOString()
+        });
+        
+      if (error) throw error;
+    } catch (err) {
+      console.error('Failed to save node to database:', err);
+    }
+  }
+
 async function processFunction(functionId: string, node: SiloNode, silo: Silo, siloId: string, nodeId: string) {
     let result;
   
@@ -749,9 +771,38 @@ async function processFunction(functionId: string, node: SiloNode, silo: Silo, s
     return { citations: [] };
   }
   
-  function createDefaultSubtask(): any {
-    return { id: crypto.randomUUID(), title: 'New Subtask', status: 'not-started' };
-  }
+function addSubtask(parentNodeId: string) {
+  if (!silo) return;
+  
+  // Create a new task node with parent reference
+  const newSubtask = {
+    id: crypto.randomUUID(),
+    type: 'task',
+    position: { x: 0, y: 0 },
+    data: {
+      title: 'New Subtask',
+      status: 'not-started',
+      isComplete: false,
+      parentId: parentNodeId,
+      priority: 'medium'
+    },
+    updated_at: new Date().toISOString()
+  };
+  
+  // Add to siloStore
+  $siloStore = $siloStore.map(s => {
+    if (s.id === siloId) {
+      return {
+        ...s,
+        nodes: [...s.nodes, newSubtask]
+      };
+    }
+    return s;
+  });
+  
+  // Save to database
+  saveNodeToDatabase(newSubtask);
+}
   
   function checkRequirements(node: SiloNode, silo: Silo): any {
     return { requirementsMet: false };

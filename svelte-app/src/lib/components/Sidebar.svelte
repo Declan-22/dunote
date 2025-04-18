@@ -25,12 +25,15 @@
   let contextMenuPosition = { x: 0, y: 0 };
   let contextMenuTabIndex = -1;
   let isMobile = false;
+
+  
   
   // Default navigation items
   const defaultNavItems = [
     { id: 'home', name: 'Home', href: '/', icon: 'home', default: true },
     { id: 'silos', name: 'Silos', href: '/silos', icon: 'nodes', default: true },
-    { id: 'notes', name: 'Notes', href: '/notes', icon: 'document', default: true }
+    { id: 'notes', name: 'Notes', href: '/notes', icon: 'document', default: true },
+    { id: 'pricing', name: 'Pricing', href: '/pricing', icon: 'pricing', default: true }
   ];
   
   // User customizable navigation items
@@ -44,6 +47,7 @@
     { value: 'calendar', label: 'Calendar' },
     { value: 'settings', label: 'Settings' },
     { value: 'chat', label: 'Chat' },
+    { value: 'pricing', label: 'Pricing' },
     { value: 'search', label: 'Search' }
   ];
   
@@ -227,6 +231,9 @@ $: {
         return `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>`;
       case 'search':
         return `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>`;
+      case 'pricing':
+        return `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h.008v.008H6V6z" />`;
       default:
         return `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>`;
     }

@@ -1195,7 +1195,7 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
     top: 0;
     left: 0;
     width: 150px;
-    background-color: #2a2a2a;
+    background-color: var(--bg-secondary);
     border-radius: 4px; 
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     z-index: 10;

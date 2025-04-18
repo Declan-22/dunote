@@ -2,10 +2,7 @@
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 
-
-
 @import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;500;600;700&display=swap');
-
 
 :root {
   /* Base Colors */
@@ -14,11 +11,14 @@
   --brand-green: #0d6d43;
   --brand-green-light: #2abe7e;
   --brand-green-dark: #0e5234;
+  --brand-green-accent: #009b534d;
+
+  --button-bg: #000000;
+  --button-text: #ffffff;
   
   /* Text Colors */
   --dark-text: #292d2f;
   --light-text: #ffffff;
-
   
   /* Status/Alert Colors */
   --success: #4caf50;
@@ -69,7 +69,16 @@
   --text-secondary: var(--neutral-300);
   --border-color: var(--border-dark);
   --logo-filter: invert(1);
-
+  --brand-accent: var(--brand-green-light);
+  --brand-accent-muted: var(--brand-green);
+  --text-accent: var(--brand-green-light);
+  --bg-accent: rgba(46, 190, 126, 0.15);
+  --pill-bg: rgba(46, 190, 126, 0.1);
+  --node-icon-bg: rgba(46, 190, 126, 0.2);
+  --bg-accenttwo: rgba(27, 27, 27, 0.322);
+  --bg-pricing: rgba(162, 201, 174, 0.507);
+  --button-bg: #ffffff;
+  --button-text: #000000;
 }
 
 /* Light Theme */
@@ -79,7 +88,16 @@
   --text-primary: var(--dark-text);
   --text-secondary: var(--neutral-700);
   --border-color: var(--border-light);
-
+  --brand-accent: var(--brand-green-dark);
+  --brand-accent-muted: var(--brand-green);
+  --text-accent: var(--brand-green-dark);
+  --bg-accent: rgba(14, 82, 52, 0.1);
+  --pill-bg: rgba(14, 82, 52, 0.08);
+  --node-icon-bg: rgba(14, 82, 52, 0.15);
+  --bg-accenttwo: rgba(247, 247, 247, 0.938);
+  --bg-pricing: rgb(211, 241, 220);
+  --button-bg: #000000;
+  --button-text: #ffffff;
 }
 
 html {
@@ -622,3 +640,19 @@ input:focus, textarea:focus, select:focus {
 .prose-base { font-size: var(--text-base) !important; }
 .prose-lg { font-size: var(--text-lg) !important; }
 .prose-xl { font-size: var(--text-xl) !important; }
+
+.task-node:hover .priority-indicator {
+  width: var(--priority-indicator-width-hover, 4px);
+  transition: width 0.1s ease;
+
+}
+
+.priority-indicator {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+.button-theme {
+  background-color: var(--button-bg);
+  color: var(--button-text);
+}
