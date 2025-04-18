@@ -442,7 +442,7 @@
 {:else if currentNote}
 <div class="notes-app h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
   <!-- Status bar -->
-  <div class="bg-[var(--bg-secondary)] py-2 px-4 flex justify-between items-center border-b border-[var(--border-color)] text-xs">
+  <div class="bg-transparent py-2 px-4 flex justify-between items-center border-b border-[var(--border-color)] text-xs">
     <div class="flex items-center space-x-2">
 
     </div>
