@@ -3,7 +3,6 @@
   import { getNodePosition, siloStore } from '$lib/stores/siloStore';
   import type { SiloNode, SiloEdge, } from '$lib/stores/siloStore';
 
-  
   // Define props with proper types
   export let activeSiloId: string;
   export let nodes: SiloNode[] = [];

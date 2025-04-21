@@ -28,3 +28,13 @@ export interface DependencyEdge {
   target: string;
   type: 'blocking' | 'sequential' | 'resource';
 }
+
+export type Space = {
+  id: string;
+  name: string;
+  href: string;
+  icon: string;
+  default: boolean;
+  user_id?: string;
+  color?: string; // Add this line
+};

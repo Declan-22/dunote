@@ -1,7 +1,18 @@
 // src/lib/stores/noteStore.ts
 import { writable } from 'svelte/store';
 import { supabase } from '$lib/supabaseClient';
-import type { Node } from '$lib/types/nodes';
+
+
+
+export interface Node {
+  id: string;
+  type: string;
+  position: any;
+  data: any;
+  siloId?: string;
+  title?: string;
+}
+
 
 export interface Note {
   id: string;
@@ -27,21 +38,26 @@ function createNoteStore() {
 
     async loadNotes(page = 1, itemsPerPage = 20): Promise<Note[]> {
       const { data, error } = await supabase
-      .from('notes')
-      .select(`
-        *,
-        attachedNodes:note_nodes(
-          node_id,
-          nodes!inner(id, title)
-        )
-      `)
-      .order('created_at', { ascending: false });
-  
-    return data?.map(note => ({
-      ...note,
-      attachedNodes: note.attachedNodes?.map((conn: { nodes: any }) => conn.nodes) || []
-    })) || [];
-  },
+        .from('notes')
+        .select(`
+          *,
+          note_nodes(
+            node_id,
+            nodes:node_id(id, title)
+          )
+        `)
+        .order('created_at', { ascending: false });
+    
+      if (error) {
+        console.error('Error loading notes:', error);
+        return [];
+      }
+    
+      return data?.map(note => ({
+        ...note,
+        attachedNodes: note.note_nodes?.map((conn: any) => conn.nodes) || []
+      })) || [];
+    },
 
     async loadNoteById(id: string) {
       const { data, error } = await supabase
@@ -85,9 +101,13 @@ function createNoteStore() {
     },
 
     async saveNote(note: Partial<Note>) {
+      // Create a clean copy without virtual properties
+      const { attachedNodes, nodes, ...noteToSave } = note;
+      
+      // Save just the note data
       const { data, error } = await supabase
         .from('notes')
-        .upsert(note)
+        .upsert(noteToSave)
         .select()
         .single();
     

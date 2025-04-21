@@ -27,6 +27,7 @@
   let editingResourceNodeId = '';
   let editableResourceContent = '';
   let editableResourceTitle = '';
+  export let spaceId: string;
 
   type PortPosition = {
     input: { x: number; y: number };
@@ -998,6 +999,7 @@ function extractQuotes(quote: string) { // Add type annotation
     </div>
   {/if}
 {/if}
+<p>Space ID: {spaceId}</p>
 
 
 

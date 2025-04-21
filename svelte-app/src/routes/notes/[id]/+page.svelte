@@ -41,18 +41,18 @@
     } from 'lucide-svelte';
 
 
-  interface Note {
-      id: string;
-      title: string;
-      content: string;
-      tags: string[];
-      created_at: string;
-      updated_at: string;
-      user_id: string;
-      attachedNodes: Array<{ id: string; title: string }>;
-      node_id?: string;
-      ts_vector?: string;
-  }
+    interface Note {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+  attachedNodes: Array<{ id: string; title: string }>;
+  node_id?: string;
+  ts_vector?: string;
+}
   
 
     let isLoading = true;
@@ -70,7 +70,7 @@
       tags: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      attachedNodes: []
+      attachedNodes: [] // This is fine for the model, but we'll strip it when saving
     };
     let canvas: HTMLCanvasElement | null = null;
 
@@ -86,48 +86,73 @@
 
   
     onMount(async () => {
-    const noteId = $page.params.id;
-    if (noteId && noteId !== 'new') {
-      currentNote = await noteStore.getNoteById(noteId);
-    } else {
-      currentNote = await noteStore.createNewNote();
+  const noteId = $page.params.id;
+
+  // Load available nodes for attachment
+  await loadAvailableNodes();
+  
+  // Load existing note or create new one
+  if (noteId && noteId !== 'new') {
+    await loadNote(noteId);
+  } else {
+    // Create new note properly
+    currentNote = {
+      id: '',
+      title: '',
+      content: '',
+      tags: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      user_id: $user?.id || '',
+      attachedNodes: []
+    };
+  }
+  
+  // Make sure the DOM is ready before initializing the editor
+  setTimeout(() => {
+    const editorElement = document.querySelector('#editor');
+    if (editorElement) {
+      editor = new Editor({
+        element: editorElement,
+        extensions: [
+          StarterKit,
+          Placeholder.configure({ 
+            placeholder: 'Start writing...',
+            showOnlyWhenEditable: true 
+          }),
+          TaskList,
+          TaskItem.configure({
+            nested: true,
+          }),
+          Highlight,
+          Link,
+          Image,
+          Underline,
+          Table,
+          TableRow,
+          TableCell,
+          TableHeader,
+          TextStyle
+        ],
+        content: currentNote.content || '<p></p>',
+        editorProps: {
+          attributes: {
+            class: 'prose prose-lg max-w-none focus:outline-none font-mono p-4',
+            style: 'min-height: 300px; width: 100%; white-space: pre-wrap; word-wrap: break-word;'
+          }
+        },
+        onUpdate: ({ editor }) => {
+          currentNote.content = editor.getHTML();
+          autoSave();
+        }
+      });
+      
+      // Add editor focus for immediate typing
+      editor.commands.focus();
     }
-    
-    // Initialize editor with currentNote content
-    editor = new Editor({
-      element: document.querySelector('#editor'),
-      extensions: [StarterKit, /* other extensions */],
-      content: currentNote.content,
-      onUpdate: () => autoSave()
-    });
-    
     isLoading = false;
-
-
-      // Load available nodes for attachment
-    loadAvailableNodes();
-    
-    // Load existing note or create new one
-    const url = new URL(window.location.href);
-
-    
-    if (noteId) {
-      (async () => {
-        await loadNote(noteId);
-      })();
-    } else {
-      // Create new note properly
-      currentNote = {
-        id: '',
-        title: '',
-        content: '',
-        tags: [],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        attachedNodes: []
-      };
-    }
-  });
+  }, 100);
+});
   
   onDestroy(() => {
     if (editor) {
@@ -172,88 +197,113 @@
   }
 }
   
-    async function loadNote(id: string) {
-      try {
-          const { data, error } = await supabase
-              .from('notes')
-              .select('*, attachedNodes:note_nodes(nodes(id, title))')
-              .eq('id', id)
-              .single();
+async function loadNote(id: string) {
+  try {
+    // First try to get from the store
+    const storeNote = $noteStore.find(n => n.id === id);
+    if (storeNote) {
+      currentNote = { ...storeNote };
+      if (editor) {
+        editor.commands.setContent(currentNote.content || '<p></p>');
+      }
+      return;
+    }
 
-          if (error) throw error;
-          
-          currentNote = {
-              ...data,
-              attachedNodes: data.attachedNodes.map((an: any) => an.nodes)
-          };
-          
-          if (editor) {
-              editor.commands.setContent(currentNote.content);
-          }
-      } catch (error) {
-          console.error('Error loading note:', error);
+    // Otherwise load from DB
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*, attachedNodes:note_nodes(node:nodes(id, title))')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    
+    // Transform the data structure to match our Note interface
+    currentNote = {
+      ...data,
+      // Flatten the nested structure from Supabase
+      attachedNodes: data.attachedNodes?.map((item: any) => item.node) || []
+    };
+    
+    // Wait for editor to be initialized
+    setTimeout(() => {
+      if (editor) {
+        editor.commands.setContent(currentNote.content || '<p></p>');
       }
+    }, 150);
+  } catch (error) {
+    console.error('Error loading note:', error);
   }
+}
+
+function autoSave() {
+  // Clear previous timeout
+  if (savedTimeout) clearTimeout(savedTimeout);
   
-  function autoSave() {
-    // Clear previous timeout
-    if (savedTimeout) clearTimeout(savedTimeout);
-    
-    isSaving = true;
-    
-    // Set new timeout
-    savedTimeout = setTimeout(async () => {
-      try {
-        currentNote.updated_at = new Date().toISOString();
-        
-        if (!currentNote.id) {
-          // Create new note
-          const { data, error } = await supabase
-            .from('notes')
-            .insert([currentNote])
-            .select()
-            .single();
-            
-          if (error) throw error;
-          
-          currentNote.id = data.id;
-          
-          // Update URL without page reload
-          const url = new URL(window.location.href);
-          url.searchParams.set('id', currentNote.id);
-          window.history.pushState({}, '', url);
-        } else {
-          // Update existing note
-          const { error } = await supabase
-            .from('notes')
-            .update(currentNote)
-            .eq('id', currentNote.id);
-            
-          if (error) throw error;
-        }
-        
-        // Update last saved time
-        const now = new Date();
-        lastSavedTime = now.toLocaleTimeString();
-        
-        // Update note store
-        noteStore.update(notes => {
-          const index = notes.findIndex(n => n.id === currentNote.id);
-          if (index >= 0) {
-            notes[index] = currentNote;
-          } else {
-            notes.push(currentNote);
-          }
-          return notes;
-        });
-        
-        isSaving = false;
-      } catch (error) {
-        console.error('Error saving note:', error);
-        isSaving = false;
+  isSaving = true;
+  
+  // Set new timeout
+  savedTimeout = setTimeout(async () => {
+    try {
+      // Create a copy of currentNote without attachedNodes for saving
+      const { attachedNodes, ...noteToSave } = { ...currentNote };
+      
+      // Make sure we have content from the editor
+      if (editor) {
+        noteToSave.content = editor.getHTML();
       }
-    }, 1000);
-  }
+      
+      noteToSave.updated_at = new Date().toISOString();
+      
+      if (!noteToSave.id) {
+        // Create new note
+        const { data, error } = await supabase
+          .from('notes')
+          .insert([noteToSave])
+          .select()
+          .single();
+          
+        if (error) throw error;
+        
+        currentNote.id = data.id;
+        
+        // Update URL without page reload
+        const url = new URL(window.location.href);
+        url.pathname = `/notes/${currentNote.id}`;
+        window.history.pushState({}, '', url);
+      } else {
+        // Update existing note
+        const { error } = await supabase
+          .from('notes')
+          .update(noteToSave)
+          .eq('id', noteToSave.id);
+          
+        if (error) throw error;
+      }
+      
+      // Update last saved time
+      const now = new Date();
+      lastSavedTime = now.toLocaleTimeString();
+      
+      // Update note store
+      noteStore.update(notes => {
+        const index = notes.findIndex(n => n.id === currentNote.id);
+        if (index >= 0) {
+          // Copy current note but preserve attachedNodes
+          notes[index] = { ...currentNote };
+        } else {
+          notes.push({ ...currentNote });
+        }
+        return notes;
+      });
+      
+      isSaving = false;
+    } catch (error) {
+      console.error('Error saving note:', error);
+      isSaving = false;
+    }
+  }, 1000);
+}
   
   function toggleBold() {
     editor.chain().focus().toggleBold().run();
@@ -328,11 +378,20 @@
   try {
     // First ensure note exists in DB
     if (!currentNote.id) {
-      const { data: newNote } = await supabase
+      const saveData = { 
+        ...currentNote, 
+        user_id: $user?.id || '',
+        content: editor ? editor.getHTML() : currentNote.content 
+      };
+      delete saveData.attachedNodes; // Remove the attachedNodes property
+      
+      const { data: newNote, error } = await supabase
         .from('notes')
-        .insert(currentNote)
+        .insert(saveData)
         .select()
         .single();
+        
+      if (error) throw error;
       currentNote.id = newNote.id;
     }
 
@@ -344,12 +403,12 @@
         node_id: nodeId
       });
 
-    if (!error) {
-      // Update local state
-      const node = availableNodes.find(n => n.id === nodeId);
-      if (node) {
-        currentNote.attachedNodes = [...currentNote.attachedNodes, node];
-      }
+    if (error) throw error;
+    
+    // Update local state
+    const node = availableNodes.find(n => n.id === nodeId);
+    if (node) {
+      currentNote.attachedNodes = [...currentNote.attachedNodes, node];
     }
   } catch (err) {
     console.error('Attachment failed:', err);
@@ -357,10 +416,26 @@
   showAttachModal = false;
 }
 
-  function detachNode(nodeId: string) {
+async function detachNode(nodeId: string) {
+  try {
+    // Update local state
     currentNote.attachedNodes = currentNote.attachedNodes.filter(node => node.id !== nodeId);
+    
+    // Also remove from database
+    if (currentNote.id) {
+      const { error } = await supabase
+        .from('note_nodes')
+        .delete()
+        .match({ note_id: currentNote.id, node_id: nodeId });
+        
+      if (error) throw error;
+    }
+    
     autoSave();
+  } catch (err) {
+    console.error('Detachment failed:', err);
   }
+}
   
   function addTag() {
     if (newTag.trim() && !currentNote.tags.includes(newTag.trim())) {
@@ -517,12 +592,12 @@
     {/if}
     
     <!-- TipTap Editor -->
-    <div id="editor" class="prose max-w-none focus:outline-none">
+    <div id="editor" class="bg-transparent border-none font-mono rounded-md focus:outline-none focus:ring-0">
       <input 
-        type="text" 
-        placeholder="Start writing..." 
-        class="w-full text-1xl font-regular bg-transparent border-none placeholder:text-[var(--text-secondary)] placeholder:opacity-50 focus:outline-none focus:ring-0"
-      /> 
+      type="text" 
+      placeholder="Start writing..." 
+      class="w-full text-1xl font-regular bg-transparent border-none placeholder:text-[var(--text-secondary)] placeholder:opacity-50 focus:outline-none focus:ring-0"
+    />
     </div>
   </div>
   </div>
