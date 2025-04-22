@@ -4,7 +4,7 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { user } from '$lib/stores/userStore';
 	import Output from '$lib/components/Output.svelte';
-	import Notes from '$lib/components/Notes.svelte';
+	import NotesList from '$lib/components/NotesList.svelte';
 
   const spaceId = $page.params.id;
 	let spaceName = '';
@@ -67,7 +67,7 @@
 			<!-- Notes Sidebar -->
 			<div class="bg-[var(--bg-secondary)] rounded-xl shadow-md p-6 space-y-4">
 				<h2 class="text-xl font-semibold text-[var(--text-primary)]">Notes</h2>
-				<Notes spaceId={spaceId} />
+				<NotesList spaceId={spaceId} />
 			</div>
 		</div>
 	{:else}

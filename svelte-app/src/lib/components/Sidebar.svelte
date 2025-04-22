@@ -109,19 +109,64 @@ $: {
 }
 
   // Check if we're on mobile
-  onMount(() => {
+  onMount(async () => {
+
+    try {
+    const start = performance.now();
+    const { data, error } = await supabase.from('_health').select('*').limit(1);
+    const end = performance.now();
+    
+    console.log(`Supabase connectivity check: ${error ? 'FAILED' : 'OK'} (${Math.round(end - start)}ms)`);
+    if (error) {
+      console.error("Supabase connection error:", error);
+    }
+  } catch (e) {
+    console.error("Failed to check Supabase connection:", e);
+  }
+
   checkMobile();
   window.addEventListener('resize', checkMobile);
   
-  // Improved loading logic for local storage
-  if (!$user) {
+  // First, set up auth state listener
+  const { data: authListener } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        console.log("Auth state change: user signed in", session?.user?.id);
+        // Wait for user store to update
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await initUserData();
+      } else if (event === 'SIGNED_OUT') {
+        console.log("Auth state change: user signed out");
+        // Handle signed out state - maybe load from localStorage
+        const storedSpaces = localStorage.getItem('userSpaces');
+        if (storedSpaces) {
+          try {
+            spaces.set(JSON.parse(storedSpaces));
+          } catch (e) {
+            console.error("Failed to parse stored spaces:", e);
+            spaces.set([...defaultNavItems]);
+          }
+        } else {
+          spaces.set([...defaultNavItems]);
+        }
+      }
+    }
+  );
+  
+  // Check if we're already authenticated
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) {
+    console.log("User already authenticated on mount:", session.user.id);
+    await initUserData();
+  } else {
+    console.log("No authenticated user on mount");
+    // Load from localStorage
     const storedSpaces = localStorage.getItem('userSpaces');
     const storedFolders = localStorage.getItem('userFolders');
     
     if (storedSpaces) {
       try {
-        const parsedSpaces = JSON.parse(storedSpaces);
-        spaces.set(parsedSpaces.length ? parsedSpaces : [...defaultNavItems]);
+        spaces.set(JSON.parse(storedSpaces));
       } catch (e) {
         console.error("Failed to parse stored spaces:", e);
         spaces.set([...defaultNavItems]);
@@ -130,21 +175,51 @@ $: {
     
     if (storedFolders) {
       try {
-        const parsedFolders = JSON.parse(storedFolders);
-        folders.set(parsedFolders || []);
+        folders.set(JSON.parse(storedFolders));
       } catch (e) {
         console.error("Failed to parse stored folders:", e);
         folders.set([]);
       }
     }
-  } else {
-    initUserData();
   }
   
   return () => {
     window.removeEventListener('resize', checkMobile);
+    authListener.subscription.unsubscribe();
   };
 });
+
+async function debugSpaces(userId) {
+  console.log("DEBUG: Directly checking spaces table for user", userId);
+  
+  
+  try {
+    const { data, error } = await supabase
+      .from('spaces')
+      .select('*')
+      .eq('user_id', userId);
+      
+    if (error) {
+      console.error("DEBUG: Error fetching spaces:", error);
+      return;
+    }
+    
+    console.log("DEBUG: Raw spaces data from DB:", data);
+    console.log("DEBUG: Count of spaces:", data ? data.length : 0);
+    
+    // If no data, let's check if the table exists and has any records
+    if (!data || data.length === 0) {
+      const { data: allSpaces, error: allError } = await supabase
+        .from('spaces')
+        .select('count');
+        
+      console.log("DEBUG: Total spaces in table:", allSpaces);
+      console.log("DEBUG: Error checking all spaces:", allError);
+    }
+  } catch (e) {
+    console.error("DEBUG: Fatal error checking spaces:", e);
+  }
+}
 
 // Subscribe to spaces and folders changes to save to localStorage
 const unsubscribeSpaces = spaces.subscribe(value => {
@@ -165,18 +240,32 @@ onDestroy(() => {
 });
 
 async function initUserData() {
-  if (!$user) return;
-  loadUserProfile();
-  await initSpaces($user.id);
-  await initFolders($user.id);
-}
-  
-  // Save nav items when they change
-  $: {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('userNavItems', JSON.stringify($userNavItems));
-    }
+  if (!$user) {
+    console.warn("initUserData called but no user in store");
+    return;
   }
+  
+  console.log("Initializing user data for:", $user.id);
+  
+  // Load user profile
+  loadUserProfile();
+  
+  // Load spaces first
+  try {
+    await initSpaces($user.id);
+    console.log("Spaces loaded:", $spaces.length);
+  } catch (err) {
+    console.error("Error loading spaces:", err);
+  }
+  
+  // Then load folders
+  try {
+    await initFolders($user.id);
+    console.log("Folders loaded:", $folders.length);
+  } catch (err) {
+    console.error("Error loading folders:", err);
+  }
+}
   
   function checkMobile() {
     isMobile = window.innerWidth < 768;
@@ -185,27 +274,23 @@ async function initUserData() {
     }
   }
 
-  function handleAddSpace() {
+  async function handleAddSpace() {
   if (!newSpaceName) return;
   
-  if ($user?.id) { // Optional chaining here
-    addSpace(newSpaceName, newSpaceIcon, $user.id);
+  if ($user?.id) {
+    await addSpace(newSpaceName, newSpaceIcon, $user.id, newSpaceColor);
   } else {
-    // Add locally for non-authenticated users
-    spaces.update(items => [
-      ...items, 
-      {
-        id: `space-${Date.now()}`,
-        name: newSpaceName,
-        href: `/spaces/${newSpaceName.toLowerCase().replace(/\s+/g, '-')}`,
-        icon: newSpaceIcon,
-        default: false,
-        color: newSpaceColor
-      }
-    ]);
+    // Local handling
+    spaces.update(items => [...items, {
+      id: `space-${Date.now()}`,
+      name: newSpaceName,
+      href: `/spaces/${newSpaceName.toLowerCase().replace(/\s+/g, '-')}`,
+      icon: newSpaceIcon,
+      default: false,
+      color: newSpaceColor
+    }]);
   }
   
-  // Reset and close modal
   newSpaceName = '';
   newSpaceIcon = 'document';
   newSpaceColor = '#4CAF50';
@@ -521,6 +606,17 @@ function resetToDefaults() {
           {/if}
         </div>
 
+        {#if $user && $spaces.length <= 4} <!-- 4 would be your default spaces count -->
+        <div class="p-2 text-xs text-[var(--neutral-500)] font-mono flex items-center gap-1">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          {#if !$sidebarCollapsed}
+            <span class="ml-1">No spaces loaded</span>
+          {/if}
+        </div>
+{/if}
+
         <!-- Folders and Spaces -->
         <div class="space-y-1" on:contextmenu={(e) => showEmptyAreaContextMenu(e)}>
           <!-- Standalone Spaces (not in folders) -->
@@ -576,8 +672,8 @@ function resetToDefaults() {
                 on:click={() => toggleFolder(folder.id)}
                 on:contextmenu={(e) => showFolderContextMenu(e, folder.id)}
               >
-                <svg class="w-5 h-5 mr-2"  fill="none" color={folder.color} viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              <svg class="w-5 h-5 mr-2" fill="none" style="color: {folder.color}" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                     d={folder.isOpen 
                       ? "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" 
                       : "M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"} 
@@ -785,24 +881,24 @@ function resetToDefaults() {
           Remove Folder
         </button>
       {:else if contextMenuType === 'emptyArea'}
-        <button 
-          on:click={() => showNewSpaceModal = true}
-          class="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-primary)] transition-colors flex items-center"
-        >
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-          </svg>
-          Add Space
-        </button>
-        <button 
-          on:click={() => showNewFolderModal = true}
-          class="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-primary)] transition-colors flex items-center mt-1"
-        >
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v4m0 0v4m0-4h4m-4 0H8m9 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-          Add Folder
-        </button>
+      <button 
+      on:click|stopPropagation={() => {
+        showNewSpaceModal = true;
+        showContextMenu = false;
+      }}
+      class="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-primary)] transition-colors flex items-center"
+    >
+      Add Space
+    </button>
+    <button 
+      on:click|stopPropagation={() => {
+        showNewFolderModal = true;
+        showContextMenu = false;
+      }}
+      class="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-primary)] transition-colors flex items-center mt-1"
+    >
+      Add Folder
+    </button>
       {/if}
 
 

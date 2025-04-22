@@ -1,41 +1,107 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { siloStore, updateNodePosition, getNodePosition, renameSilo, deleteSilo, createConnection, type Position } from '$lib/stores/siloStore';
-  import NodeLibrary from '$lib/components/NodeLibrary.svelte';
-  import TriggerNode from '$lib/components/TriggerNode.svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { fade, slide } from 'svelte/transition';
+  import { siloStore, updateNodePosition, getNodePosition, renameSilo, deleteSilo, createConnection, executeWorkflow, type Position } from '$lib/stores/siloStore';
+  import { supabase } from '$lib/supabaseClient';
+  import { user } from '$lib/stores/userStore';
+  
+  // Components
   import FlowView from '$lib/components/FlowView.svelte';
-  import TaskDump from '$lib/components/TaskDump.svelte';
+  import Output from '$lib/components/Output.svelte';
+  import NotesList from '$lib/components/NotesList.svelte';
+  import TriggerNode from '$lib/components/TriggerNode.svelte';
+  import NodeLibrary from '$lib/components/NodeLibrary.svelte';
+  import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
   import type { SiloNode } from '$lib/stores/siloStore';
   import type { NodeType } from '$lib/types/nodes';
-  import { supabase } from '$lib/supabaseClient'; // Import your Supabase client
-  import { user } from '$lib/stores/userStore';
-  import { executeWorkflow } from '$lib/stores/siloStore'; // Import your workflow execution function
-
-
-
+  
+  // Type definitions
+  type ViewMode = 'flow' | 'output' | 'space' | 'calendar';
+  
   // State variables
+  let currentView: ViewMode = 'flow';
   let showLibrary = false;
   let showTaskEditor = false;
   let taskEditorText = '';
-  let activeNode: SiloNode | null = null;
   let renamingSilo = false;
-  let newSiloName = 'My NFew Trip';
+  let newSiloName = '';
+  let siloId = $page.params.id;
+  let spaceData: any = null;
+  let isLoading = false;
+  let processingError = '';
+  let activeNode: SiloNode | null = null;
   let connectionStart: { nodeId: string, position: Position, isOutput: boolean } | null = null;
   let tempConnectionPath = '';
   let tempConnectionClass = '';
-  let isLoading = false;
-  let processingError = '';
-
-  $: silo = $siloStore.find(s => s.id === $page.params.id);
+  
+  // Reactive variables
+  $: silo = $siloStore.find(s => s.id === siloId);
   $: if (silo) newSiloName = silo.name;
+  
+  onMount(async () => {
+    // Load data based on the URL
+    if (siloId && $user) {
+      // Determine the initial view based on the URL path
+      if ($page.url.pathname.includes('/output')) {
+        currentView = 'output';
+      } else if ($page.url.pathname.includes('/spaces')) {
+        currentView = 'space';
+        await loadSpaceData(siloId);
+      } else if ($page.url.pathname.includes('/calendar')) {
+        currentView = 'calendar';
+      }
+    }
+  });
+  
+  async function loadSpaceData(id: string) {
+    const { data, error } = await supabase
+      .from('spaces')
+      .select('*')
+      .eq('id', id)
+      .single();
+      
+    if (!error && data) {
+      spaceData = data;
+      newSiloName = data.name;
+    }
+  }
+  
+  function handleFlowStart() {
+    if (!silo) return;
+    
+    // Execute the workflow
+    executeWorkflow(silo.id);
+    
+    // Add animation for trigger node
+    const triggerButton = document.querySelector('.trigger-button');
+    if (triggerButton) {
+      triggerButton.classList.add('running');
+      setTimeout(() => {
+        triggerButton.classList.remove('running');
+      }, 2000);
+    }
+  }
+  
+  function setViewMode(mode: ViewMode) {
+    currentView = mode;
+    // Update URL without full page reload
+    const baseUrl = `/silos/${siloId}`;
+    const url = mode === 'flow' ? baseUrl : 
+                mode === 'output' ? `${baseUrl}/output` :
+                mode === 'space' ? `/spaces/${siloId}` :
+                `${baseUrl}/calendar`;
+                
+    history.pushState(null, '', url);
+  }
 
   // Add a node from the library
-  function handleAddNode(event: CustomEvent<NodeType>) {
-      const type = event.detail;
-      if (!silo) return;
-      addNode(silo.id, type, { x: 100, y: 100 });
-      showLibrary = false;
+  async function handleAddNode(event: CustomEvent<NodeType>) {
+    const type = event.detail;
+    if (!silo) return;
+    await addNode(silo.id, type, { x: 100, y: 100 });
+    showLibrary = false;
   }
 
   async function addNode(siloId: string, type: string, position: Position) {
@@ -45,7 +111,7 @@
       const { data, error } = await supabase
         .from('nodes')
         .insert({
-        title: `Untitled ${type.charAt(0).toUpperCase() + type.slice(1)} Node`,
+          title: `Untitled ${type.charAt(0).toUpperCase() + type.slice(1)} Node`,
           type: type,
           position: position,
           silo_id: siloId,
@@ -71,303 +137,393 @@
     }
   }
 
-function handleFlowStart() {
-  if (!silo) return;
-  
-  // Execute the workflow
-  executeWorkflow(silo.id);
-  
-  // Add animation for trigger node
-  const triggerButton = document.querySelector('.trigger-button');
-  if (triggerButton) {
-    triggerButton.classList.add('running');
-    setTimeout(() => {
-      triggerButton.classList.remove('running');
-    }, 2000);
-  }
-}
-
   // Connection handling for temporary connections during dragging
   function handleConnectionStart(event: CustomEvent<{ nodeId: string, position: Position, isOutput: boolean }>) {
-      connectionStart = event.detail;
-      document.addEventListener('mousemove', handleConnectionDrag);
-      document.addEventListener('mouseup', handleConnectionDragEnd);
+    connectionStart = event.detail;
+    document.addEventListener('mousemove', handleConnectionDrag);
+    document.addEventListener('mouseup', handleConnectionDragEnd);
   }
 
   function handleConnectionDrag(e: MouseEvent) {
-      if (!connectionStart) return;
-      
-      // Update temporary connection line
-      const mousePos = { x: e.clientX, y: e.clientY };
-      tempConnectionPath = calculateConnectionPath(
-        connectionStart.position,
-        mousePos
-      );
-      tempConnectionClass = "connection-line dragging-connection";
+    if (!connectionStart) return;
+    
+    // Update temporary connection line
+    const mousePos = { x: e.clientX, y: e.clientY };
+    tempConnectionPath = calculateConnectionPath(
+      connectionStart.position,
+      mousePos
+    );
+    tempConnectionClass = "connection-line dragging-connection";
   }
 
   function handleConnectionDragEnd() {
-      document.removeEventListener('mousemove', handleConnectionDrag);
-      document.removeEventListener('mouseup', handleConnectionDragEnd);
-      tempConnectionPath = '';
+    document.removeEventListener('mousemove', handleConnectionDrag);
+    document.removeEventListener('mouseup', handleConnectionDragEnd);
+    tempConnectionPath = '';
   }
 
   function handleConnectionEnd(event: CustomEvent<{ nodeId: string, position: Position, isOutput: boolean }>) {
-      if (!connectionStart || !silo) return;
-      
-      // Only connect from outputs to inputs
-      if (connectionStart.isOutput && !event.detail.isOutput) {
-        createConnection(connectionStart.nodeId, event.detail.nodeId, silo.id);
-      } else if (!connectionStart.isOutput && event.detail.isOutput) {
-        createConnection(event.detail.nodeId, connectionStart.nodeId, silo.id);
-      }
-      
-      connectionStart = null;
-      tempConnectionPath = '';
+    if (!connectionStart || !silo) return;
+    
+    // Only connect from outputs to inputs
+    if (connectionStart.isOutput && !event.detail.isOutput) {
+      createConnection(connectionStart.nodeId, event.detail.nodeId, silo.id);
+    } else if (!connectionStart.isOutput && event.detail.isOutput) {
+      createConnection(event.detail.nodeId, connectionStart.nodeId, silo.id);
+    }
+    
+    connectionStart = null;
+    tempConnectionPath = '';
   }
 
   // Process tasks from task editor
   async function handleUpdateTasks() {
-      if (!silo) return;
-      isLoading = true;
-      processingError = '';
+    if (!silo) return;
+    isLoading = true;
+    processingError = '';
+    
+    try {
+      const tasks = taskEditorText.split('\n').filter(t => t.trim());
       
-      try {
-        const tasks = taskEditorText.split('\n').filter(t => t.trim());
-        
-        if (tasks.length === 0) {
-          throw new Error("Please enter at least one task");
-        }
-        
-        // Show loading state
-        siloStore.update(store => {
-          return store.map(s => s.id === silo.id 
-            ? {...s, isLoading: true}
-            : s
-          );
-        });
-
-        const response = await fetch('/api/tasks/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tasks, siloId: silo.id })
-        });
-
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.error || 'Processing failed');
-        }
-
-        // Update the current silo with new nodes/edges
-        if (data.nodes && data.edges) {
-          // Create nodes from the response
-          const actualNodes = data.nodes.slice(1);
-          
-          const nodeData = actualNodes.map((nodeRow: any, index: number) => {
-            const taskId = nodeRow[0];
-            
-            return {
-              id: `node-${index}-${Date.now()}`,
-              type: 'task' as NodeType,
-              position: { x: index * 300, y: 100 + (index % 3) * 100 },
-              siloId: silo.id,
-              data: { 
-                title: typeof taskId === 'string' ? taskId.substring(0, 50) : `Task ${index}`,
-                description: "",
-                status: 'not-started'
-              },
-              portPositions: undefined,
-              validation: {
-                isValid: true,
-                missingConnections: []
-              }
-            };
-          });
-          
-          // Create edges between the nodes
-          const edgeData = data.edges.flatMap((edge: string, index: number) => {
-            const sourceNode = nodeData.find((n: any) => n.data.title.includes(edge));
-            
-            if (!sourceNode) return [];
-            
-            return nodeData
-              .filter((n: any) => n.id !== sourceNode.id)
-              .map((targetNode: any, edgeIndex: number) => ({
-                id: `edge-${index}-${edgeIndex}-${Date.now()}`,
-                source: sourceNode.id,
-                target: targetNode.id,
-                siloId: silo.id,
-                pathType: 'bezier',
-                pathData: null // Will be calculated by ConnectionLine
-              }));
-          });
-          
-          // Update the store
-          siloStore.update(store => {
-            return store.map(s => {
-              if (s.id === silo.id) {
-                return {
-                  ...s,
-                  nodes: [...nodeData],
-                  edges: [...edgeData],
-                  isLoading: false
-                };
-              }
-              return s;
-            });
-          });
-        }
-        
-        showTaskEditor = false;
-      } catch (err) {
-        processingError = err instanceof Error ? err.message : 'Unknown error';
-        
-        // Reset loading state in case of error
-        siloStore.update(store => {
-          return store.map(s => s.id === silo.id 
-            ? {...s, isLoading: false}
-            : s
-          );
-        });
-      } finally {
-        isLoading = false;
+      if (tasks.length === 0) {
+        throw new Error("Please enter at least one task");
       }
+      
+      // Show loading state
+      siloStore.update(store => {
+        return store.map(s => s.id === silo.id 
+          ? {...s, isLoading: true}
+          : s
+        );
+      });
+
+      const response = await fetch('/api/tasks/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks, siloId: silo.id })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Processing failed');
+      }
+
+      // Update the current silo with new nodes/edges
+      if (data.nodes && data.edges) {
+        // Create nodes from the response
+        const actualNodes = data.nodes.slice(1);
+        
+        const nodeData = actualNodes.map((nodeRow: any, index: number) => {
+          const taskId = nodeRow[0];
+          
+          return {
+            id: `node-${index}-${Date.now()}`,
+            type: 'task' as NodeType,
+            position: { x: index * 300, y: 100 + (index % 3) * 100 },
+            siloId: silo.id,
+            data: { 
+              title: typeof taskId === 'string' ? taskId.substring(0, 50) : `Task ${index}`,
+              description: "",
+              status: 'not-started'
+            },
+            portPositions: undefined,
+            validation: {
+              isValid: true,
+              missingConnections: []
+            }
+          };
+        });
+        
+        // Create edges between the nodes
+        const edgeData = data.edges.flatMap((edge: string, index: number) => {
+          const sourceNode = nodeData.find((n: any) => n.data.title.includes(edge));
+          
+          if (!sourceNode) return [];
+          
+          return nodeData
+            .filter((n: any) => n.id !== sourceNode.id)
+            .map((targetNode: any, edgeIndex: number) => ({
+              id: `edge-${index}-${edgeIndex}-${Date.now()}`,
+              source: sourceNode.id,
+              target: targetNode.id,
+              siloId: silo.id,
+              pathType: 'bezier',
+              pathData: null // Will be calculated by ConnectionLine
+            }));
+        });
+        
+        // Update the store
+        siloStore.update(store => {
+          return store.map(s => {
+            if (s.id === silo.id) {
+              return {
+                ...s,
+                nodes: [...nodeData],
+                edges: [...edgeData],
+                isLoading: false
+              };
+            }
+            return s;
+          });
+        });
+      }
+      
+      showTaskEditor = false;
+    } catch (err) {
+      processingError = err instanceof Error ? err.message : 'Unknown error';
+      
+      // Reset loading state in case of error
+      siloStore.update(store => {
+        return store.map(s => s.id === silo.id 
+          ? {...s, isLoading: false}
+          : s
+        );
+      });
+    } finally {
+      isLoading = false;
+    }
   }
 
   // Utility function (needed for temp connections)
   function calculateConnectionPath(startPos: Position, endPos: Position): string {
-      const deltaX = endPos.x - startPos.x;
-      const offset = Math.abs(deltaX) / 2;
-      
-      return `M ${startPos.x} ${startPos.y} C ${startPos.x + offset} ${startPos.y}, ${endPos.x - offset} ${endPos.y}, ${endPos.x} ${endPos.y}`;
+    const deltaX = endPos.x - startPos.x;
+    const offset = Math.abs(deltaX) / 2;
+    
+    return `M ${startPos.x} ${startPos.y} C ${startPos.x + offset} ${startPos.y}, ${endPos.x - offset} ${endPos.y}, ${endPos.x} ${endPos.y}`;
   }
 </script>
 
-<div class="silo-editor bg-[var(--bg-primary)] text-[var(--text-primary)]">
-  {#if silo}
-      <!-- Toolbar -->
-      <div class="toolbar bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">
-          <a href="/silos" class="back-button text-[var(--text-secondary)] hover:bg-opacity-10 hover:bg-[var(--text-primary)]">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M19 12H5M12 19l-7-7 7-7"/>
-              </svg>
-              Back
+<div class="unified-container bg-[var(--bg-primary)] text-[var(--text-primary)] h-screen flex flex-col overflow-hidden">
+  <!-- Header with Navigation Tabs -->
+  <header class="bg-[var(--bg-secondary)] border-b border-[var(--border-color)] px-5 pt-4">
+    {#if silo}
+      <!-- Project Name and Controls -->
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <a href="/silos" class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
           </a>
-          <a href={`/silos/${silo.id}/output`} class="output-link">
-            View Output
-          </a>
+          
           {#if renamingSilo}
-              <input
-                  bind:value={newSiloName}
-                  on:keydown={(e) => e.key === 'Enter' && renameSilo(silo.id, newSiloName) && (renamingSilo = false)}
-                  class="rename-input bg-[var(--bg-primary)] text-[var(--text-primary)] border-[var(--border-color)]"
-              />
-              <button on:click={() => { renameSilo(silo.id, newSiloName); renamingSilo = false; }} 
-                  class="toolbar-button bg-[var(--brand-green)] text-[var(--light-text)] hover:bg-[var(--brand-green-dark)]">
-                  Save
-              </button>
+            <input
+              bind:value={newSiloName}
+              on:keydown={(e) => e.key === 'Enter' && renameSilo(silo.id, newSiloName) && (renamingSilo = false)}
+              class="rename-input bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)] px-2 py-1 rounded"
+            />
+            <button 
+              on:click={() => { renameSilo(silo.id, newSiloName); renamingSilo = false; }} 
+              class="btn-primary bg-[var(--brand-green)] text-white px-2 py-1 rounded text-sm">
+              Save
+            </button>
           {:else}
-              <h2 class="text-[var(--text-primary)]">{silo.name}</h2>
-              <button on:click={() => renamingSilo = true} 
-                  class="toolbar-button bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:bg-opacity-80">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                  </svg>
-                  Rename
-              </button>
-          {/if}
-      </div>
-
-      <!-- Loading overlay -->
-      {#if silo.isLoading}
-          <div class="loading-overlay bg-[var(--bg-primary)] bg-opacity-80">
-              <div class="loading-spinner border-t-[var(--brand-green)]"></div>
-              <p class="text-[var(--text-primary)]">Processing your tasks...</p>
-          </div>
-      {/if}
-
-      <!-- FlowView component for nodes and connections -->
-      <FlowView 
-          siloId={silo.id} 
-          on:connectionstart={handleConnectionStart}
-          on:connectionend={handleConnectionEnd}
-      />
-
-      <!-- Temporary connection being dragged (outside FlowView for z-index purposes) -->
-      {#if tempConnectionPath}
-          <svg class="temp-connections-layer">
-              <path
-                  d={tempConnectionPath}
-                  class={tempConnectionClass}
-              />
-          </svg>
-      {/if}
-      <div class="trigger-container">
-        <TriggerNode siloId={silo.id} on:triggerFlow={handleFlowStart} />
-      </div>
-      <!-- Add node button -->
-      <button
-          on:click={() => showLibrary = true}
-          class="add-button bg-[var(--brand-green)] hover:bg-[var(--brand-green-dark)] text-white"
-          aria-label="Add node"
-      >
-          +
-      </button>
-      
-      <!-- Edit tasks button -->
-      <div class="floating-edit-panel">
-          <button 
-              on:click={() => showTaskEditor = !showTaskEditor}
-              class="edit-tasks-button bg-[var(--brand-green)] hover:bg-[var(--brand-green-dark)] text-white"
-          >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            <h1 class="text-xl font-semibold">{silo.name}</h1>
+            <button 
+              on:click={() => renamingSilo = true} 
+              class="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
               </svg>
-              Edit Tasks
+            </button>
+          {/if}
+        </div>
+        
+        <!-- Run and Action Buttons -->
+        <div class="flex items-center gap-3">
+          <button 
+            on:click={handleFlowStart} 
+            class="trigger-button bg-[var(--brand-green)] hover:bg-[var(--brand-green-dark)] text-white px-3 py-1 rounded flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Run Flow
           </button>
           
-          {#if showTaskEditor}
-              <div class="task-editor-panel bg-[var(--bg-secondary)] border border-[var(--border-color)] shadow-md">
-                  <h3 class="text-[var(--text-primary)]">Edit Tasks</h3>
-                  <p class="task-editor-help text-[var(--text-secondary)]">Add, modify, or remove tasks. One task per line.</p>
-                  <textarea 
-                      bind:value={taskEditorText} 
-                      placeholder="Add or modify tasks..." 
-                      class="bg-[var(--bg-primary)] text-[var(--text-primary)] border-[var(--border-color)]"
-                  ></textarea>
-                  {#if processingError}
-                      <p class="text-[var(--error)] text-sm mb-2">{processingError}</p>
-                  {/if}
-                  <div class="task-editor-actions">
-                      <button 
-                          on:click={handleUpdateTasks} 
-                          class="btn-primary bg-[var(--brand-green)] hover:bg-[var(--brand-green-dark)] text-white disabled:opacity-50" 
-                          disabled={isLoading}
-                      >
-                          {isLoading ? 'Processing...' : 'Update Tasks'}
-                      </button>
-                      <button 
-                          on:click={() => showTaskEditor = false} 
-                          class="btn-secondary bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-color)] hover:bg-opacity-80" 
-                          disabled={isLoading}
-                      >
-                          Cancel
-                      </button>
-                  </div>
-              </div>
+          <button 
+            on:click={() => showTaskEditor = !showTaskEditor} 
+            class="bg-[var(--bg-primary)] hover:bg-opacity-80 border border-[var(--border-color)] px-3 py-1 rounded flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            Edit Tasks
+          </button>
+        </div>
+      </div>
+      
+      <!-- View Tabs -->
+      <div class="flex border-b border-[var(--border-color)]">
+        <button 
+          class="tab-button {currentView === 'flow' ? 'active' : ''}" 
+          on:click={() => setViewMode('flow')}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="3" y1="9" x2="21" y2="9"></line>
+            <line x1="9" y1="21" x2="9" y2="9"></line>
+          </svg>
+          Flow Editor
+        </button>
+        <button 
+          class="tab-button {currentView === 'output' ? 'active' : ''}" 
+          on:click={() => setViewMode('output')}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+          </svg>
+          Output
+        </button>
+        <button 
+          class="tab-button {currentView === 'space' ? 'active' : ''}" 
+          on:click={() => setViewMode('space')}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
+          Workspace
+        </button>
+        <button 
+          class="tab-button {currentView === 'calendar' ? 'active' : ''}" 
+          on:click={() => setViewMode('calendar')}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+          Calendar
+        </button>
+      </div>
+    {/if}
+  </header>
+  
+  <!-- Main Content Area -->
+  <main class="flex-1 overflow-hidden relative">
+    {#if silo}
+      <!-- Loading overlay -->
+      {#if silo.isLoading}
+        <div class="loading-overlay bg-[var(--bg-primary)] bg-opacity-80">
+          <div class="loading-spinner border-t-[var(--brand-green)]"></div>
+          <p class="text-[var(--text-primary)]">Processing your tasks...</p>
+        </div>
+      {/if}
+    
+      {#if currentView === 'flow'}
+        <div class="h-full" in:fade={{ duration: 150 }}>
+          <FlowView 
+            siloId={siloId} 
+            on:connectionstart={handleConnectionStart}
+            on:connectionend={handleConnectionEnd}
+          />
+          
+          <!-- Temporary connection being dragged -->
+          {#if tempConnectionPath}
+            <svg class="temp-connections-layer">
+              <path
+                d={tempConnectionPath}
+                class={tempConnectionClass}
+              />
+            </svg>
           {/if}
-      </div>
+          
+          <!-- Add Node Button -->
+          <button
+            on:click={() => showLibrary = true}
+            class="add-button bg-[var(--brand-green)] hover:bg-[var(--brand-green-dark)] text-white fixed bottom-6 right-6 w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-lg"
+            aria-label="Add node"
+          >
+            +
+          </button>
+        </div>
+      {:else if currentView === 'output'}
+        <div class="h-full p-6 overflow-auto" in:fade={{ duration: 150 }}>
+          <Output siloId={siloId} />
+        </div>
+      {:else if currentView === 'space'}
+        <div class="h-full p-6 overflow-auto" in:fade={{ duration: 150 }}>
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Output Section -->
+            <div class="col-span-2 bg-[var(--bg-secondary)] rounded-xl shadow-md p-6 space-y-4">
+              <h2 class="text-xl font-semibold text-[var(--text-primary)]">Your Output</h2>
+              <Output siloId={siloId} />
+            </div>
 
+            <!-- Notes Sidebar -->
+            <div class="bg-[var(--bg-secondary)] rounded-xl shadow-md p-6 space-y-4">
+              <h2 class="text-xl font-semibold text-[var(--text-primary)]">Notes</h2>
+              <NotesList siloId={siloId} />
+            </div>
+          </div>
+        </div>
+      {:else if currentView === 'calendar'}
+        <div class="h-full p-6 overflow-auto" in:fade={{ duration: 150 }}>
+          <div class="bg-[var(--bg-secondary)] rounded-xl shadow-md p-6">
+            <h2 class="text-xl font-semibold text-[var(--text-primary)] mb-4">Activity Calendar</h2>
+            <CalendarHeatmap siloId={siloId} />
+          </div>
+        </div>
+      {/if}
+      
+      <!-- Task Editor Panel -->
+      {#if showTaskEditor}
+        <div class="task-editor-overlay fixed inset-0 bg-transparent bg-opacity-40 flex items-center justify-center z-50" in:fade={{ duration: 150 }}>
+          <div class="task-editor-panel bg-[var(--bg-secondary)] rounded-xl shadow-lg w-full max-w-2xl m-4 p-6" in:slide={{ duration: 200 }}>
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-xl font-semibold text-[var(--text-primary)]">Edit Tasks</h3>
+              <button 
+                on:click={() => showTaskEditor = false} 
+                class="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <p class="task-editor-help text-[var(--text-secondary)] mb-3">Add, modify, or remove tasks. One task per line.</p>
+            <textarea 
+              bind:value={taskEditorText} 
+              placeholder="Add or modify tasks..." 
+              class="bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)] p-3 rounded w-full h-48 mb-4"
+            ></textarea>
+            {#if processingError}
+              <p class="text-[var(--error)] text-sm mb-2">{processingError}</p>
+            {/if}
+            <div class="flex justify-end gap-3">
+              <button 
+                on:click={() => showTaskEditor = false} 
+                class="btn-secondary bg-[var(--bg-primary)] text-[var(--text-secondary)] border border-[var(--border-color)] px-4 py-2 rounded hover:bg-opacity-80"
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+              <button 
+                on:click={handleUpdateTasks} 
+                class="btn-primary bg-[var(--brand-green)] hover:bg-[var(--brand-green-dark)] text-white px-4 py-2 rounded"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Processing...' : 'Update Tasks'}
+              </button>
+            </div>
+          </div>
+        </div>
+      {/if}
+      
       <!-- Node Library modal -->
-      <NodeLibrary show={showLibrary} on:add={handleAddNode} on:close={() => showLibrary = false} />
-  {:else}
-      <div class="error-message text-[var(--error)]">
-          Silo not found! <a href="/silos" class="text-[var(--brand-green)] hover:text-[var(--brand-green-light)]">Return to silos</a>
+      {#if showLibrary}
+        <NodeLibrary show={showLibrary} on:add={handleAddNode} on:close={() => showLibrary = false} />
+      {/if}
+    {:else}
+      <div class="flex items-center justify-center h-full">
+        <div class="text-center py-12">
+          <h2 class="text-xl font-medium text-[var(--text-secondary)]">Project not found</h2>
+          <p class="mt-2">This project doesn't exist or you don't have access to it.</p>
+          <a href="/silos" class="text-[var(--brand-green)] hover:text-[var(--brand-green-light)] mt-4 inline-block">Return to Projects</a>
+        </div>
       </div>
-  {/if}
+    {/if}
+  </main>
 </div>
 
 <style>

@@ -25,55 +25,51 @@ export const spaces = writable<Space[]>([...defaultSpaces]);
 
 // Initialize spaces with user data
 export async function initSpaces(userId: string) {
-  // Start with default spaces
-  let userSpaces = [...defaultSpaces];
-  
-  // Fetch user's custom spaces
-  const { data, error } = await supabase
-    .from('spaces')
-    .select('*')
-    .eq('user_id', userId);
-  
-  if (!error && data) {
-    // Add custom spaces to the list
-    const customSpaces = data.map(space => ({
-      id: space.id,
-      name: space.name,
-      href: `/spaces/${space.id}`,
-      icon: space.icon,
-      default: false,
-      user_id: space.user_id
-    }));
-    
-    userSpaces = [...userSpaces, ...customSpaces];
+  try {
+    const { data, error } = await supabase
+      .from('spaces')
+      .select('id, name, icon, color, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      const formattedSpaces = data.map(space => ({
+        ...space,
+        href: `/space/${space.id}`, // Generate href client-side
+        default: space.is_default
+      }));
+      
+      spaces.set([...defaultSpaces, ...formattedSpaces]);
+    }
+  } catch (e) {
+    console.error("Space initialization failed:", e);
   }
-  
-  spaces.set(userSpaces);
 }
 
 // Add a new space
-export async function addSpace(name: string, icon: string, userId: string) {
+export async function addSpace(name: string, icon: string, userId: string, color?: string) {
   const { data, error } = await supabase
     .from('spaces')
-    .insert([
-      { name, icon, user_id: userId }
-    ])
-    .select();
-  
-  if (!error && data) {
+    .insert([{ 
+      name, 
+      icon, 
+      color,
+      user_id: userId 
+    }])
+    .select('id, name, icon, color, created_at');
+
+  if (data?.[0]) {
     const newSpace = {
-      id: data[0].id,
-      name: data[0].name,
-      href: `/space/${data[0].id}`,  // Consistent URL format
-      icon: data[0].icon,
-      default: false,
-      user_id: data[0].user_id
+      ...data[0],
+      href: `/space/${data[0].id}`, // Generate href here
+      default: false
     };
     
     spaces.update(items => [...items, newSpace]);
     return newSpace;
   }
   
+  console.error("Space creation error:", error);
   return null;
 }
 

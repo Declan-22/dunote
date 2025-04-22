@@ -17,14 +17,17 @@ export const folders = writable<Folder[]>([]);
 
 // Initialize folders with user data
 export async function initFolders(userId: string) {
-  // Fetch user's folders
   const { data, error } = await supabase
     .from('folders')
     .select('*')
     .eq('user_id', userId);
-  
+
   if (!error && data) {
-    folders.set(data);
+    const foldersWithDefaults = data.map(folder => ({
+      ...folder,
+      isOpen: folder.isOpen ?? false
+    }));
+    folders.set(foldersWithDefaults);
   } else {
     folders.set([]);
   }
@@ -34,17 +37,27 @@ export async function initFolders(userId: string) {
 export async function addFolder(name: string, color: string, userId: string) {
   const { data, error } = await supabase
     .from('folders')
-    .insert([
-      { name, color, spaces: [], user_id: userId }
-    ])
+    .insert([{
+      name,
+      color,
+      spaces: [], // Properly typed as UUID array
+      user_id: userId
+    }])
     .select();
-  
-  if (!error && data) {
+
+  if (error) {
+    console.error('Folder creation error:', error);
+    return null;
+  }
+
+  if (data) {
     const newFolder = data[0];
-    folders.update(items => [...items, newFolder]);
+    folders.update(items => [...items, {
+      ...newFolder,
+      isOpen: true // Local UI state only
+    }]);
     return newFolder;
   }
-  
   return null;
 }
 
@@ -65,30 +78,31 @@ export async function removeFolder(folderId: string) {
 
 // Add space to folder
 export async function addSpaceToFolder(spaceId: string, folderId: string) {
-  // Get the folder
-  let currentFolder: Folder | undefined;
-  folders.update(items => {
-    const folder = items.find(f => f.id === folderId);
-    if (folder) {
-      if (!folder.spaces) folder.spaces = [];
-      if (!folder.spaces.includes(spaceId)) {
-        folder.spaces = [...folder.spaces, spaceId];
-      }
-      currentFolder = folder;
-    }
-    return items;
-  });
-  
-  if (currentFolder) {
-    // Update in database
+  const { data: folderData } = await supabase
+    .from('folders')
+    .select('spaces')
+    .eq('id', folderId)
+    .single();
+
+  if (folderData) {
+    const updatedSpaces = [...folderData.spaces, spaceId];
+    
     const { error } = await supabase
       .from('folders')
-      .update({ spaces: currentFolder.spaces })
+      .update({ spaces: updatedSpaces })
       .eq('id', folderId);
-    
-    return !error;
+
+    if (!error) {
+      folders.update(items => 
+        items.map(folder => 
+          folder.id === folderId 
+            ? { ...folder, spaces: updatedSpaces } 
+            : folder
+        )
+      );
+      return true;
+    }
   }
-  
   return false;
 }
 

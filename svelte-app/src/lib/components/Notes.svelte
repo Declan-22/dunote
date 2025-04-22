@@ -33,18 +33,18 @@
     let userId = $user?.id;
     // Note data structure interface
     interface Note {
-
-      id: string;
-      title: string;
-      content: string;
-      node_id?: string; // Optional ID of the node this note is attached to
-      created_at: string;
-      updated_at: string;
-      tags: string[];
-      user_id?: string;
-      ts_vector?: string;
-      nodes?: Partial<Node>[];
-    }
+  id: string;
+  title: string;
+  content: string;
+  node_id?: string; 
+  created_at: string;
+  updated_at: string;
+  tags: string[];
+  user_id?: string;
+  ts_vector?: string;
+  attachedNodes?: any[]; // Add this line with the correct type
+  nodes?: Partial<Node>[];
+}
   
     // Editor state
     let notes: Note[] = [];
@@ -59,6 +59,8 @@
     let availableNodes: any[] = [];
     let newTagInput = '';
     let searchTimeout: NodeJS.Timeout;
+
+    
   
   async function handleSearchInput(e: Event) {
     const query = (e.target as HTMLInputElement).value;

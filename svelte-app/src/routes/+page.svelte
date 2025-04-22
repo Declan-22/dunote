@@ -7,91 +7,55 @@
   let taskInput = '';
   let isLoading = false;
   
-  async function handleProcess(event: CustomEvent<string>) {
-    isLoading = true;
+  async function handleProcess(event: CustomEvent<{ tasks: any[] }>) {
+  isLoading = true;
+  
+  try {
+    const parsedTasks = event.detail.tasks;
     
-    try {
-      // Extract the tasks from the event
-      const tasks = event.detail;
-      
-      // If tasks exist, process them directly here instead of just navigating
-      if (tasks) {
-        // Navigate to the silos page with the processed tasks
-        const response = await fetch('/api/tasks/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tasks: tasks.split('\n').filter(t => t.trim()) })
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.error || 'Processing failed');
+    if (parsedTasks?.length) {
+      const siloId = crypto.randomUUID();
+      const siloName = parsedTasks[0].name.substring(0, 30);
+
+      const nodeData = parsedTasks.map((task, index) => ({
+        id: task.id,
+        type: 'task',
+        position: { 
+          x: 100 + (index % 3) * 300, 
+          y: 100 + Math.floor(index / 3) * 150 
+        },
+        siloId,
+        data: {
+          title: task.name,
+          description: '',
+          status: task.status,
+          priority: task.priority,
+          dueDate: task.due_date,
+          resources: task.resources,
+          blockedBy: task.blocked_by
         }
-        
-        // Handle successful response by creating a new silo
-        if (data.nodes && data.edges) {
-          const siloId = crypto.randomUUID();
-          const siloName = `Project: ${tasks.split('\n')[0]?.substring(0, 20) || 'New Project'}...`;
-          
-          // Format nodes with proper structure
-          const nodeData = data.nodes.slice(1).map((nodeRow: [string, string], index: number) => {
-            const taskId = nodeRow[0];
-            
-            return {
-              id: `node-${index}-${Date.now()}`,
-              type: 'task',
-              position: { x: 100 + (index % 3) * 300, y: 100 + Math.floor(index / 3) * 150 },
-              siloId,
-              data: { 
-                title: typeof taskId === 'string' ? taskId.substring(0, 50) : `Task ${index}`,
-                description: nodeRow[1] || "",
-                status: 'not-started'
-              },
-              validation: {
-                isValid: true,
-                missingConnections: []
-              }
-            };
-          });
-          
-          // Create edges based on dependencies
-          const edgeData = data.edges.map((edge: [number, number], index: number) => {
-            const [sourceIdx, targetIdx] = edge;
-            const sourceId = `node-${sourceIdx}-${Date.now()}`;
-            const targetId = `node-${targetIdx}-${Date.now()}`;
-            
-            return {
-              id: `edge-${index}-${Date.now()}`,
-              source: sourceId,
-              target: targetId,
-              siloId
-            };
-          });
-          
-          // Add to store
-          siloStore.update(store => [
-            ...store,
-            {
-              id: siloId,
-              name: siloName,
-              nodes: nodeData,
-              edges: edgeData,
-              isLoading: false
-            }
-          ]);
-          
-          // Navigate to new silo
-          goto(`/silos/${siloId}`);
+      }));
+
+      siloStore.update(store => [
+        ...store,
+        {
+          id: siloId,
+          name: siloName,
+          nodes: nodeData,
+          edges: [],
+          isLoading: false
         }
-      }
-    } catch (error) {
-      console.error('Error processing tasks:', error);
-      alert('Failed to process tasks. Please try again.');
-    } finally {
-      isLoading = false;
+      ]);
+
+      goto(`/silos/${siloId}`);
     }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Failed to process tasks');
+  } finally {
+    isLoading = false;
   }
+}
 </script>
 
 <main class="min-h-screen bg-background-light dark:bg-background-dark p-8 transition-colors duration-300">

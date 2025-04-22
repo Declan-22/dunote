@@ -1,140 +1,359 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    import { createEventDispatcher } from 'svelte';
+    import { parseTaskInput } from '$lib/utils/taskParser';
+    import { fade } from 'svelte/transition';
+      
+    const dispatch = createEventDispatcher();
+    export let value = '';
+    let tasks: any[] = [];
+    let newTask = '';
+    let showHelp = false;
+    let tableVisible = false;
   
-  export let value = '';
-  let isProcessing = false;
-  const dispatch = createEventDispatcher();
-
-  async function processTasks() {
-      isProcessing = true;
-      try {
-        // Dispatch the raw tasks for processing
-        dispatch('process', { tasks: value });
-      } finally {
-        isProcessing = false;
+    const columns = [
+      { id: 'name', label: 'Task Name' },
+      { id: 'class', label: 'Class' },
+      { id: 'due_date', label: 'Due Date' },
+      { id: 'status', label: 'Status' },
+      { id: 'priority', label: 'Priority' },
+      { id: 'time_estimate', label: 'Time Estimate' },
+      { id: 'resources', label: 'Resources' }
+    ];
+  
+    const priorityColors = {
+      high: 'var(--error)',
+      medium: 'var(--warning)',
+      low: 'var(--success)'
+    };
+  
+    const statusIcons = {
+      'not-started': `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>`,
+      'in-progress': `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`,
+      'completed': `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`
+    };
+  
+    function addTask(e: KeyboardEvent) {
+      if (e.key === 'Enter') {
+        const parsed = parseTaskInput(newTask);
+        tasks = [...tasks, ...parsed];
+        tableVisible = true;
+        newTask = '';
+        e.preventDefault();
       }
     }
-</script>
-
-<div class="task-dump-container resizable">
+  
+    function runDump() {
+      dispatch('process', { tasks });
+    }
+  
+    function clearTable() {
+      tasks = [];
+      tableVisible = false;
+    }
+  </script>
+  
+  <div class="task-dump-container">
     <div class="header">
-            <h2 class="text-3xl font-bold mb-2 text-brand-green">Task Dump</h2>
-            <p class="instruction">Dump all the stuff you have to do, here.</p>
+      <h2>Task Dump</h2>
+      <button class="help-button" on:click={() => showHelp = !showHelp}>?</button>
     </div>
-
-    <textarea
-            bind:value
-            class="task-input"
-            placeholder="Example:
--Go to a meeting at 3:30 PM
--Take notes on quantum mechanics
--Study for geometry unit"
-            rows="6"
-    ></textarea>
-
-    <button
-            on:click={processTasks}
-            class="process-btn"
-            disabled={isProcessing}
-    >
-            {#if isProcessing}
-                    <span class="processing">
-                            <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
-                            </svg>
-                            Analyzing Tasks...
+  
+    {#if showHelp}
+      <div class="help-box" transition:fade>
+        <p>Type tasks naturally. The system will automatically detect:</p>
+        <ul>
+          <li>Dates (today, tomorrow, specific dates)</li>
+          <li>Classes or subjects</li>
+          <li>Priorities (urgent, important)</li>
+          <li>Time estimates</li>
+          <li>Resources needed</li>
+        </ul>
+      </div>
+    {/if}
+  
+    {#if !tableVisible}
+      <div class="input-container">
+        <input
+          class="floating-input font-mono"
+          bind:value={newTask}
+          on:keydown={addTask}
+          placeholder="Type your task and press Enter..."
+          autofocus
+        />
+      </div>
+    {:else}
+      <div class="table-container" transition:fade={{ duration: 200 }}>
+        <table class="task-table">
+          <thead>
+            <tr>
+              {#each columns as col}
+                <th>{col.label}</th>
+              {/each}
+            </tr>
+          </thead>
+          <tbody>
+            {#each tasks as task, i (task.id)}
+              <tr>
+                <td><input class="font-mono" bind:value={task.name} /></td>
+                <td>
+                  <input class="font-mono" bind:value={task.class} placeholder="Class" />
+                </td>
+                <td><input class="font-mono" type="text" bind:value={task.due_date} placeholder="YYYY-MM-DD" /></td>
+                <td>
+                  <div class="status-container">
+                    <span class="status-icon" class:completed={task.status === 'completed'} class:in-progress={task.status === 'in-progress'}>
+                      {@html statusIcons[task.status] || statusIcons['not-started']}
                     </span>
-            {:else}
-                    <span class="flex items-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                            </svg>
-                            Generate Smart Plan
-                    </span>
-            {/if}
-    </button>
-</div>
-
-<style lang="postcss">
-
-
-  .task-dump-container {
-      max-width: 768px; /* Equivalent to max-w-screen-md */
-      margin: 0 auto; /* Equivalent to mx-auto */
-      padding: 1.5rem; /* Equivalent to p-6 */
-      border-radius: 0.75rem; /* Equivalent to rounded-xl */
-      transition: background-color 0.3s, color 0.3s; /* Equivalent to transition-colors duration-300 */
+                    <select bind:value={task.status} class="status-select font-mono">
+                      <option value="not-started">Not Started</option>
+                      <option value="in-progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </div>
+                </td>
+                <td>
+                  <select bind:value={task.priority} class="priority-select font-mono">
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </td>
+                <td>
+                  <input class="font-mono" bind:value={task.time_estimate} placeholder="Time" />
+                </td>
+                <td>
+                  <input class="font-mono" bind:value={task.resources} placeholder="Resources" />
+                </td>
+              </tr>
+            {/each}
+            <tr class="new-task-row">
+              <td colspan={columns.length}>
+                <input
+                  class="font-mono"
+                  bind:value={newTask}
+                  on:keydown={addTask}
+                  placeholder="+ Add new task"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+  
+        <div class="controls">
+          <button class="control-button clear" on:click={clearTable}>Clear</button>
+          <button class="control-button run" on:click={runDump}>Save</button>
+        </div>
+      </div>
+    {/if}
+  </div>
+    
+  <style>
+    /* Global styles */
+    .task-dump-container {
       background-color: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      box-shadow: var(--shadow-lg);
-  }
-
-  .header {
-      margin-bottom: 1.5rem; /* Equivalent to mb-6 */
-      text-align: center; /* Equivalent to text-center */
-  }
-
-  .instruction {
-      font-size: 0.875rem; /* Equivalent to text-sm */
-      color: var(--neutral-500); /* Equivalent to text-neutral-500 */
-  }
-
-  .task-input {
-      width: 100%; /* Equivalent to w-full */
-      padding: 1rem; /* Equivalent to p-4 */
-      border-radius: 0.5rem; /* Equivalent to rounded-lg */
-      border: 1px solid var(--border-color);
-      resize: none; /* Equivalent to resize-none */
-      transition: all 0.2s; /* Equivalent to transition-all duration-200 */
-      background-color: var(--bg-primary);
+      border-radius: 4px;
+      padding: 12px;
       color: var(--text-primary);
-      caret-color: var(--brand-green);
-      min-height: 160px;
-
-      &::placeholder {
-          color: var(--neutral-500);
-      }
-
-      &:focus {
-          outline: none; /* Equivalent to outline-none */
-          border-color: var(--brand-green);
-          box-shadow: 0 0 0 3px var(--brand-green-light);
-      }
-  }
-
-  .process-btn {
-      margin-top: 1rem; /* Equivalent to mt-4 */
-      width: 100%; /* Equivalent to w-full */
-      padding: 0.75rem 1.5rem; /* Equivalent to py-3 px-6 */
-      border-radius: 0.5rem; /* Equivalent to rounded-lg */
-      font-weight: 600; /* Equivalent to font-semibold */
+      width: 100%;
+    }
+  
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+  
+    .header h2 {
+      font-weight: 500;
+      font-size: 1.1rem;
+      color: var(--text-primary);
+    }
+  
+    .help-button {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s; /* Equivalent to transition-all duration-200 */
-      background-color: var(--brand-green);
+      background: transparent;
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+  
+    .help-box {
+      background-color: var(--bg-accenttwo);
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+  
+    .help-box ul {
+      margin: 6px 0 0 0;
+      padding-left: 16px;
+    }
+  
+    .help-box li {
+      margin-bottom: 2px;
+    }
+  
+    /* Input styles when table is not visible */
+    .input-container {
+      display: flex;
+      align-items: center;
+      padding: 10px 0;
+    }
+  
+    .floating-input {
+      width: 100%;
+      padding: 8px 10px;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 14px;
+      outline: none;
+      color: var(--text-primary);
+    }
+  
+    /* Table styles */
+    .table-container {
+      margin-top: 10px;
+    }
+  
+    .task-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    
+    .task-table thead {
+      border-bottom: 1px solid var(--border-color);
+    }
+  
+    .task-table th {
+      padding: 8px 10px;
+      text-align: left;
+      font-weight: normal;
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+    
+    .task-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: middle;
+    }
+  
+    /* Form controls inside table */
+    .task-table input,
+    .task-table select {
+      width: 100%;
+      background: transparent;
+      border: none;
+      font-size: 0.8rem;
+      padding: 4px 0;
+      outline: none;
+      color: var(--text-primary);
+    }
+  
+    .new-task-row td {
+      padding: 10px;
+    }
+  
+    .new-task-row input {
+      width: 100%;
+      border: none;
+      padding: 4px 0;
+      font-size: 0.8rem;
+      outline: none;
+      color: var(--text-secondary);
+      background: transparent;
+    }
+  
+    /* Status styling */
+    .status-container {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  
+    .status-icon {
+      display: flex;
+      align-items: center;
+      color: var(--text-secondary);
+    }
+  
+    .status-icon.completed {
+      color: var(--success);
+    }
+  
+    .status-icon.in-progress {
+      color: var(--warning);
+    }
+  
+    .status-icon svg {
+      width: 14px;
+      height: 14px;
+    }
+  
+    .status-select,
+    .priority-select {
+      flex: 1;
+      color: var(--text-primary);
+      background-color: transparent;
+      border: none;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+  
+    /* Control buttons */
+    .controls {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+  
+    .control-button {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: none;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+  
+    .control-button.clear {
+      background-color: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+  
+    .control-button.run {
+      background-color: var(--brand-accent);
       color: var(--light-text);
-
-      &:hover:not(:disabled) {
-          background-color: var(--brand-green-dark);
-          transform: translateY(-1px);
-          box-shadow: var(--shadow-md);
-      }
-
-      &:disabled {
-          opacity: 0.75; /* Equivalent to opacity-75 */
-          cursor: not-allowed; /* Equivalent to cursor-not-allowed */
-      }
-  }
-
-  .processing {
-      display: inline-flex; /* Equivalent to inline-flex */
-      align-items: center; /* Equivalent to items-center */
-      font-size: 0.875rem; /* Equivalent to text-sm */
-  }
-
-.task-input {
-    border-color: var(--neutral-500); /* Equivalent to border-neutral-700 */
-
-  }
-</style>
+    }
+  
+    /* For proper input theming in both light and dark modes */
+    input::placeholder, 
+    select::placeholder {
+      color: var(--text-secondary);
+      opacity: 0.7;
+    }
+  
+    tr:hover {
+      background-color: var(--bg-hover);
+    }
+    
+    /* Remove focus outlines for cleaner appearance */
+    *:focus {
+      outline: none;
+    }
+  </style>
