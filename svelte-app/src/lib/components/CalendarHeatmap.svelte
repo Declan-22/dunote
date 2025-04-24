@@ -1,200 +1,257 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { format, startOfWeek, addDays, eachDayOfInterval, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+  import { onMount } from 'svelte';
+  import { format, startOfWeek, addDays, eachDayOfInterval, subMonths } from 'date-fns';
+  
+  export let siloId: string;
+  export let months: number = 6; // How many months to display
+  
+  type CalendarDay = {
+    date: Date;
+    count: number;
+    intensity: number;
+  };
+  
+  let calendarData: CalendarDay[] = [];
+  let maxCount = 0;
+  let isLoading = true;
+  let errorMessage = '';
+  
+  onMount(async () => {
+    await fetchActivityData();
+  });
+  
+  async function fetchActivityData() {
+    isLoading = true;
+    errorMessage = '';
     
-    export let siloId: string;
-    export let months: number = 6; // How many months to display
+    try {
+      console.log(`Fetching activity data for silo: ${siloId}`);
+      const response = await fetch(`/api/silos/${siloId}/activity`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`API error (${response.status}):`, errorText);
+        throw new Error(`API returned ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log(`Received ${data.length} activity records`);
+      processActivityData(data);
+    } catch (error) {
+      console.error('Error loading activity data:', error);
+      errorMessage = `Failed to load activity data. Using mock data instead.`;
+      generateMockData();
+    } finally {
+      isLoading = false;
+    }
+  }
+  
+  function generateMockData() {
+    console.log('Generating mock data');
+    const today = new Date();
+    const startDate = subMonths(today, months);
+    const dateRange = eachDayOfInterval({ start: startDate, end: today });
     
-    let calendarData: {
-      date: Date;
-      count: number;
-      intensity: number;
-    }[] = [];
-    
-    let maxCount = 0;
-    
-    onMount(async () => {
-      await fetchActivityData();
+    // Generate mock data
+    calendarData = dateRange.map(date => {
+      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+      const randomFactor = isWeekend ? 0.3 : 1;
+      const count = Math.random() > 0.6 ? Math.floor(Math.random() * 8 * randomFactor) : 0;
+      return { date, count, intensity: 0 };
     });
     
-    async function fetchActivityData() {
-      try {
-        // This would be replaced with your actual API call 
-        // to get activity data for this silo
-        const response = await fetch(`/api/silos/${siloId}/activity`);
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch activity data');
-        }
-        
-        const data = await response.json();
-        
-        // Process the activity data
-        processActivityData(data);
-      } catch (error) {
-        console.error('Error loading activity data:', error);
-        // Generate mock data for demonstration
-        generateMockData();
-      }
-    }
-    
-    function generateMockData() {
-      const today = new Date();
-      const startDate = subMonths(today, months);
-      
-      const dateRange = eachDayOfInterval({
-        start: startDate,
-        end: today
-      });
-      
-      // Generate random activity counts
-      calendarData = dateRange.map(date => {
-        // Generate more realistic data - weekends tend to have less activity
-        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-        const randomFactor = isWeekend ? 0.3 : 1;
-        
-        // Random count, with some days having zero
-        const randomChance = Math.random();
-        let count = 0;
-        
-        if (randomChance > 0.6) {
-          count = Math.floor(Math.random() * 8 * randomFactor);
-        }
-        
-        if (count > maxCount) maxCount = count;
-        
-        return { date, count, intensity: 0 };
-      });
-      
-      // Calculate intensity levels (0-4) based on the max count
-      calendarData = calendarData.map(day => ({
-        ...day,
-        intensity: day.count === 0 ? 0 : Math.ceil((day.count / maxCount) * 4)
-      }));
-    }
-    
-    function processActivityData(data: any) {
-      // Placeholder for actual data processing
-      // This would transform your API data into the calendarData format
-      generateMockData(); // For now, just use mock data
-    }
-    
-    // Group the days into weeks for the grid display
-    function getCalendarWeeks() {
-      if (calendarData.length === 0) return [];
-      
-      const firstDate = calendarData[0].date;
-      const weeks: typeof calendarData[][] = [];
-      let currentWeek: typeof calendarData = [];
-      
-      // Start the calendar from Sunday
-      const firstDay = startOfWeek(firstDate, { weekStartsOn: 0 });
-      
-      // Fill in any empty days at the start
-      const emptyDaysBefore = firstDate.getDay();
-      for (let i = 0; i < emptyDaysBefore; i++) {
-        const emptyDate = addDays(firstDay, i);
-        currentWeek.push({ date: emptyDate, count: 0, intensity: 0 });
-      }
-      
-      // Add all days
-      calendarData.forEach((day, index) => {
-        if (day.date.getDay() === 0 && currentWeek.length > 0) {
-          weeks.push([...currentWeek]);
-          currentWeek = [];
-        }
-        currentWeek.push(day);
-        
-        // Handle the last week
-        if (index === calendarData.length - 1) {
-          // Fill in any empty days at the end
-          const emptyDaysAfter = 6 - day.date.getDay();
-          for (let i = 1; i <= emptyDaysAfter; i++) {
-            const emptyDate = addDays(day.date, i);
-            currentWeek.push({ date: emptyDate, count: 0, intensity: 0 });
-          }
-          weeks.push([...currentWeek]);
-        }
-      });
-      
-      return weeks;
-    }
-    
-    // Get month labels for the calendar
-    function getMonthLabels() {
-      if (calendarData.length === 0) return [];
-      
-      const months: { name: string, index: number }[] = [];
-      let currentMonth = -1;
-      
-      calendarData.forEach(day => {
-        const monthIndex = day.date.getMonth();
-        if (monthIndex !== currentMonth) {
-          months.push({ 
-            name: format(day.date, 'MMM'), 
-            index: getCalendarWeeks().findIndex(week => 
-              week.some(d => d.date.getMonth() === monthIndex && d.date.getDate() <= 7)
-            )
-          });
-          currentMonth = monthIndex;
-        }
-      });
-      
-      return months;
-    }
-    
-    // Format activity count for display
-    function formatActivityText(count: number) {
-      if (count === 0) return "No activity";
-      if (count === 1) return "1 contribution";
-      return `${count} contributions`;
-    }
-  </script>
+    // Calculate intensities
+    calculateIntensities();
+  }
   
-  <div class="calendar-heatmap">
-    <div class="weekday-labels">
-      <div></div> <!-- Empty space for alignment -->
-      <div>Sun</div>
-      <div>Mon</div>
-      <div>Tue</div>
-      <div>Wed</div>
-      <div>Thu</div>
-      <div>Fri</div>
-      <div>Sat</div>
+  function processActivityData(data: Array<{date: string, count: number}>) {
+    console.log('Processing activity data');
+    if (!Array.isArray(data)) {
+      console.error('Invalid data format:', data);
+      throw new Error('Invalid data format received from API');
+    }
+    
+    // Create a map to store activity counts by date
+    const activityMap = new Map<string, number>();
+    
+    // Process each activity record
+    data.forEach(item => {
+      if (item && item.date) {
+        const dateKey = item.date.substring(0, 10); // Extract YYYY-MM-DD
+        const count = item.count || 1;
+        
+        const currentCount = activityMap.get(dateKey) || 0;
+        activityMap.set(dateKey, currentCount + count);
+      }
+    });
+    
+    // Create the calendar data array covering the specified months
+    const today = new Date();
+    const startDate = subMonths(today, months);
+    const dateRange = eachDayOfInterval({ start: startDate, end: today });
+    
+    calendarData = dateRange.map(date => {
+      const dateKey = format(date, 'yyyy-MM-dd');
+      const count = activityMap.get(dateKey) || 0;
+      return { date, count, intensity: 0 };
+    });
+    
+    // Calculate intensity levels
+    calculateIntensities();
+  }
+  
+  function calculateIntensities() {
+    maxCount = Math.max(1, ...calendarData.map(day => day.count));
+    
+    calendarData = calendarData.map(day => ({
+      ...day,
+      intensity: day.count === 0 ? 0 : Math.ceil((day.count / maxCount) * 4)
+    }));
+  }
+  
+  function getCalendarWeeks(): CalendarDay[][] {
+    if (calendarData.length === 0) return [];
+    
+    const weeks: CalendarDay[][] = [];
+    let currentWeek: CalendarDay[] = [];
+    
+    // Handle first week with potential empty days
+    const firstDate = new Date(calendarData[0].date);
+    const firstDayOfWeek = firstDate.getDay();
+    
+    // Fill initial empty days
+    const firstWeekStart = startOfWeek(firstDate);
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      const emptyDate = new Date(firstWeekStart);
+      emptyDate.setDate(firstWeekStart.getDate() + i);
+      currentWeek.push({ date: emptyDate, count: 0, intensity: 0 });
+    }
+    
+    // Process all calendar days
+    calendarData.forEach((day, index) => {
+      // Start a new week on Sundays
+      if (day.date.getDay() === 0 && currentWeek.length > 0) {
+        weeks.push([...currentWeek]);
+        currentWeek = [];
+      }
+      
+      currentWeek.push(day);
+      
+      // Handle the last week
+      if (index === calendarData.length - 1) {
+        // Fill remaining days in last week
+        const lastDayOfWeek = day.date.getDay();
+        for (let i = 1; i <= 6 - lastDayOfWeek; i++) {
+          const date = new Date(day.date);
+          date.setDate(date.getDate() + i);
+          currentWeek.push({ date, count: 0, intensity: 0 });
+        }
+        
+        weeks.push([...currentWeek]);
+      }
+    });
+    
+    return weeks;
+  }
+  
+  function getMonthLabels(): { name: string; index: number }[] {
+    if (calendarData.length === 0) return [];
+    
+    const monthLabels: { name: string; index: number }[] = [];
+    let currentMonth = -1;
+    let currentYear = -1;
+    
+    // Get all calendar weeks
+    const weeks = getCalendarWeeks();
+    
+    // For each day in our data
+    calendarData.forEach(day => {
+      const month = day.date.getMonth();
+      const year = day.date.getFullYear();
+      const monthYearKey = `${year}-${month}`;
+      
+      // If we encounter a new month
+      if (month !== currentMonth || year !== currentYear) {
+        // Find which week contains this month's start
+        const weekIndex = weeks.findIndex(week => 
+          week.some(d => 
+            d.date.getMonth() === month && 
+            d.date.getFullYear() === year && 
+            d.date.getDate() <= 7
+          )
+        );
+        
+        if (weekIndex !== -1) {
+          monthLabels.push({
+            name: format(day.date, 'MMM'),
+            index: weekIndex
+          });
+          
+          currentMonth = month;
+          currentYear = year;
+        }
+      }
+    });
+    
+    return monthLabels;
+  }
+  
+  function formatActivityText(count: number) {
+    return count === 0 ? "No activity" : `${count} contribution${count === 1 ? '' : 's'}`;
+  }
+</script>
+
+<div class="calendar-heatmap">
+{#if isLoading}
+  <div class="loading">Loading activity data...</div>
+{:else if errorMessage}
+  <div class="error-message">{errorMessage}</div>
+{/if}
+
+{#if calendarData.length > 0}
+  <div class="weekday-labels">
+    <div></div> <!-- Empty space for alignment -->
+    <div>Sun</div>
+    <div>Mon</div>
+    <div>Tue</div>
+    <div>Wed</div>
+    <div>Thu</div>
+    <div>Fri</div>
+    <div>Sat</div>
+  </div>
+  
+  <div class="heatmap-grid">
+    <div class="month-labels">
+      {#each getMonthLabels() as month}
+        <div class="month-label" style="grid-column: {month.index + 1}">
+          {month.name}
+        </div>
+      {/each}
     </div>
     
-    <div class="heatmap-grid">
-      <div class="month-labels">
-        {#each getMonthLabels() as month}
-          <div class="month-label" style="grid-column: {month.index + 1}">
-            {month.name}
+    <div class="days-grid">
+      {#each getCalendarWeeks() as week, weekIndex}
+        {#each week as day}
+          <div class="day-cell intensity-{day.intensity}"
+               title="{format(day.date, 'PPP')}: {formatActivityText(day.count)}"
+               style="grid-row: {day.date.getDay() + 2}; grid-column: {weekIndex + 1};">
           </div>
         {/each}
-      </div>
-      
-      <div class="days-grid">
-        {#each getCalendarWeeks() as week, weekIndex}
-          {#each week as day}
-            <div 
-              class="day-cell intensity-{day.intensity}" 
-              title="{format(day.date, 'PPP')}: {formatActivityText(day.count)}"
-              style="grid-row: {day.date.getDay() + 2}; grid-column: {weekIndex + 1};"
-            ></div>
-          {/each}
-        {/each}
-      </div>
-    </div>
-    
-    <div class="legend">
-      <span>Less</span>
-      <div class="legend-item intensity-0"></div>
-      <div class="legend-item intensity-1"></div>
-      <div class="legend-item intensity-2"></div>
-      <div class="legend-item intensity-3"></div>
-      <div class="legend-item intensity-4"></div>
-      <span>More</span>
+      {/each}
     </div>
   </div>
+  
+  <div class="legend">
+    <span>Less</span>
+    <div class="legend-item intensity-0"></div>
+    <div class="legend-item intensity-1"></div>
+    <div class="legend-item intensity-2"></div>
+    <div class="legend-item intensity-3"></div>
+    <div class="legend-item intensity-4"></div>
+    <span>More</span>
+  </div>
+{/if}
+</div>
   
   <style>
     .calendar-heatmap {

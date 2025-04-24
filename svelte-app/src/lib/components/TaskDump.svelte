@@ -267,6 +267,8 @@
     .task-table input {
         width: 100%;
         min-width: 120px;
+        padding-right: 28px; /* Creates space for the icon */
+        background-position: right 8px center;
     }
 
     .status-select, .priority-select {
@@ -490,4 +492,43 @@
   *:focus {
     outline: none;
   }
+
+   /* Mobile-specific styles */
+  @media (max-width: 640px) {
+    .task-table {
+      min-width: 100%;
+      width: 100%;
+    }
+
+    .task-table th,
+    .task-table td {
+      padding: 8px;
+      min-width: 60px; /* Smaller minimum width for mobile */
+    }
+
+    .status-container {
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .status-select,
+    .priority-select {
+      font-size: 0.7rem; /* Smaller font for dropdowns */
+    }
+
+    .task-table input {
+      min-width: 0; /* Remove fixed minimum width */
+      font-size: 0.8rem;
+    }
+
+    .controls {
+      flex-direction: column;
+    }
+
+    .control-button {
+      width: 100%;
+      text-align: center;
+    }
+  }
+
 </style>

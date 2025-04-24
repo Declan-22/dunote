@@ -296,105 +296,113 @@
 
 <div class="unified-container bg-[var(--bg-primary)] text-[var(--text-primary)] h-screen flex flex-col overflow-hidden">
   <!-- Header with Navigation Tabs -->
-  <header class="bg-[var(--bg-secondary)] border-b border-[var(--border-color)] px-5 pt-4">
+  <header class="rounded-lg shadow-md mx-4 my-3 bg-[var(--bg-secondary)] border-[var(--border-color)]">
     {#if silo}
-      <!-- Project Name and Controls -->
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-3">
-          <a href="/silos" class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-          </a>
+      <div class="p-4">
+        <!-- Project Name and Controls -->
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <a href="/silos" class="text-[var(--text-primary)] hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+            </a>
+            
+            {#if renamingSilo}
+              <div class="flex items-center gap-2">
+                <input
+                  bind:value={newSiloName}
+                  on:keydown={(e) => e.key === 'Enter' && renameSilo(silo.id, newSiloName) && (renamingSilo = false)}
+                  class="bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter name"
+                  autofocus
+                />
+                <button 
+                  on:click={() => { renameSilo(silo.id, newSiloName); renamingSilo = false; }} 
+                  class="bg-[var(--brand-green)] hover:bg-[var(--brand-dark)] text-[var(--text-primary)] px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                  Save
+                </button>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <h1 class="text-xl font-semibold text-[var(--text-primary)]">{silo.name}</h1>
+                <button 
+                  on:click={() => renamingSilo = true} 
+                  class="text-[var(--text-primary)] hover:text-[var(--bg-primary)] dark:text-[var(--text-primary)] dark:hover:text-gray-200 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                </button>
+              </div>
+            {/if}
+          </div>
           
-          {#if renamingSilo}
-            <input
-              bind:value={newSiloName}
-              on:keydown={(e) => e.key === 'Enter' && renameSilo(silo.id, newSiloName) && (renamingSilo = false)}
-              class="rename-input bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)] px-2 py-1 rounded"
-            />
+          <!-- Run and Action Buttons -->
+          <div class="flex items-center gap-3">
             <button 
-              on:click={() => { renameSilo(silo.id, newSiloName); renamingSilo = false; }} 
-              class="btn-primary bg-[var(--brand-green)] text-white px-2 py-1 rounded text-sm">
-              Save
+              on:click={handleFlowStart} 
+              class="bg-[var(--brand-green)] text-white px-4 py-2 rounded-md font-medium shadow-sm flex items-center gap-2 transition-all transform hover:scale-105">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <span class="sm:inline hidden">Run Flow</span>
             </button>
-          {:else}
-            <h1 class="text-xl font-semibold">{silo.name}</h1>
+            
             <button 
-              on:click={() => renamingSilo = true} 
-              class="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+              on:click={() => showTaskEditor = !showTaskEditor} 
+              class="bg-[var(--bg-accenttwo)] transition-all transform hover:scale-105 text-[var(--text-primary)] border border-[var(--border-color)] px-3 py-2 rounded-md flex items-center gap-2 ">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
               </svg>
+              <span class="sm:inline hidden">Edit Tasks</span>
             </button>
-          {/if}
+          </div>
         </div>
         
-        <!-- Run and Action Buttons -->
-        <div class="flex items-center gap-3">
+        <!-- View Tabs -->
+        <div class="flex space-x-1 sm:space-x-2 border-b border-[var(--bg-primary)]">
           <button 
-            on:click={handleFlowStart} 
-            class="trigger-button bg-[var(--brand-green)] hover:bg-[var(--brand-green-dark)] text-white px-3 py-1 rounded flex items-center gap-1">
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'flow' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            on:click={() => setViewMode('flow')}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+              <line x1="9" y1="21" x2="9" y2="9"></line>
             </svg>
-            Run Flow
+            <span class="sm:inline hidden">Flow Editor</span>
           </button>
-          
           <button 
-            on:click={() => showTaskEditor = !showTaskEditor} 
-            class="bg-[var(--bg-primary)] hover:bg-opacity-80 border border-[var(--border-color)] px-3 py-1 rounded flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'output' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            on:click={() => setViewMode('output')}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
             </svg>
-            Edit Tasks
+            <span class="sm:inline hidden">Output</span>
+          </button>
+          <button 
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'space' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            on:click={() => setViewMode('space')}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+            <span class="sm:inline hidden">Workspace</span>
+          </button>
+          <button 
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'calendar' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            on:click={() => setViewMode('calendar')}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span class="sm:inline hidden">Calendar</span>
           </button>
         </div>
-      </div>
-      
-      <!-- View Tabs -->
-      <div class="flex border-b border-[var(--border-color)]">
-        <button 
-          class="tab-button {currentView === 'flow' ? 'active' : ''}" 
-          on:click={() => setViewMode('flow')}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="3" y1="9" x2="21" y2="9"></line>
-            <line x1="9" y1="21" x2="9" y2="9"></line>
-          </svg>
-          Flow Editor
-        </button>
-        <button 
-          class="tab-button {currentView === 'output' ? 'active' : ''}" 
-          on:click={() => setViewMode('output')}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-          </svg>
-          Output
-        </button>
-        <button 
-          class="tab-button {currentView === 'space' ? 'active' : ''}" 
-          on:click={() => setViewMode('space')}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-          </svg>
-          Workspace
-        </button>
-        <button 
-          class="tab-button {currentView === 'calendar' ? 'active' : ''}" 
-          on:click={() => setViewMode('calendar')}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-          </svg>
-          Calendar
-        </button>
       </div>
     {/if}
   </header>
