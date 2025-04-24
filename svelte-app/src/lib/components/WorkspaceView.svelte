@@ -4,13 +4,10 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { user } from '$lib/stores/userStore';
 	import { siloStore, executeNodeFunction } from '$lib/stores/siloStore';
-	import { marked } from 'marked';
 	import { fade, slide } from 'svelte/transition';
 	import type { Silo, SiloNode, SiloEdge } from '$lib/stores/siloStore';
 
-	export let spaceId: string;
-	const siloId = $page.params.id;
-	let spaceName = '';
+	export let siloId: string;
 	let isLoading = true;
 	let error: Error | null = null;
 	let silo: Silo | undefined;
@@ -19,18 +16,7 @@
 	let editingResourceNodeId = '';
 	let editableResourceContent = '';
 	let editableResourceTitle = '';
-	let newTaskInput = '';
 	let selectedFilter = 'Priority';
-
-	type SpaceData = {
-		id: string;
-		name: string;
-		icon: string;
-		color?: string;
-		created_at: string;
-	};
-
-	let spaceData: SpaceData | null = null;
 
 	$: silo = $siloStore.find(s => s.id === siloId);
 	$: taskNodes = (silo?.nodes || []).filter(n => n.type === 'task') || [];
@@ -66,24 +52,10 @@
 	onMount(async () => {
 		isLoading = true;
 		if ($user) {
-			await loadSpaceData();
 			await loadSiloData();
 		}
 		isLoading = false;
 	});
-
-	async function loadSpaceData() {
-		const { data, error } = await supabase
-			.from('spaces')
-			.select('*')
-			.eq('id', spaceId)
-			.single();
-
-		if (!error && data) {
-			spaceData = data;
-			spaceName = data.name;
-		}
-	}
 
 	async function loadSiloData() {
 		// This would load your silo data if needed
@@ -301,58 +273,6 @@
 		}
 	}
 
-	async function createNewTask() {
-		if (!newTaskInput.trim() || !silo) return;
-
-		try {
-			// Create a new node object
-			const newTask = {
-				id: `task-${Date.now()}`,
-				type: 'task',
-				position: { x: 0, y: 0 },
-				data: {
-					title: newTaskInput,
-					isComplete: false,
-					status: 'not-started',
-					priority: 'medium',
-					dueDate: '',
-					project: ''
-				},
-				updated_at: new Date().toISOString()
-			};
-
-			// Add to local store first
-			$siloStore = $siloStore.map(s => {
-				if (s.id === siloId) {
-					return {
-						...s,
-						nodes: [...s.nodes, newTask]
-					};
-				}
-				return s;
-			});
-
-			// Save to database
-			const { error } = await supabase
-				.from('nodes')
-				.insert({
-					id: newTask.id,
-					silo_id: siloId,
-					type: 'task',
-					position: newTask.position,
-					data: newTask.data
-				});
-
-			if (error) throw error;
-			
-			// Clear input
-			newTaskInput = '';
-		} catch (err) {
-			console.error('Failed to create task:', err);
-			error = err as Error;
-		}
-	}
-
 	function getStatusDisplay(status: string) {
 		switch(status) {
 			case 'not-started': return 'Not Started';
@@ -372,30 +292,12 @@
 		<h2 class="text-xl font-medium text-[var(--text-secondary)]">Error</h2>
 		<p class="mt-2">{error.message}</p>
 	</div>
-{:else if !spaceData}
-	<div class="text-center py-12">
-		<h2 class="text-xl font-medium text-[var(--text-secondary)]">Space not found</h2>
-		<p class="mt-2">This space doesn't exist or you don't have access to it.</p>
-	</div>
 {:else}
 	<div class="flex h-full w-full bg-[var(--bg-primary)] text-[var(--text-primary)]">
 
-		<!-- Left Column: Thought Input + Structured Tasks -->
+		<!-- Left Column: Structured Tasks -->
 		<div class="w-1/3 border-r border-[var(--border-color)] flex flex-col">
 			
-			<!-- Dump Input -->
-			<div class="p-4 border-b border-[var(--border-color)]">
-				<h2 class="text-sm font-medium text-[var(--text-secondary)] mb-1">Input Your Thoughts</h2>
-				<form on:submit|preventDefault={createNewTask}>
-					<input
-						bind:value={newTaskInput}
-						type="text"
-						placeholder="e.g. Write product launch blog post"
-						class="w-full px-4 py-2 border border-[var(--border-color)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--brand-green)]"
-					/>
-				</form>
-			</div>
-
 			<!-- Structured Table -->
 			<div class="flex-1 overflow-y-auto p-4">
 				<h3 class="text-sm font-medium text-[var(--text-secondary)] mb-2">Structured Tasks</h3>
@@ -437,7 +339,7 @@
 						{#if filteredTasks.length === 0}
 							<tr class="bg-[var(--bg-primary)]">
 								<td colspan="3" class="px-3 py-6 text-center text-[var(--text-secondary)]">
-									No tasks available. Add your first task above.
+									No tasks available yet. Create tasks in the Flow Editor.
 								</td>
 							</tr>
 						{/if}
@@ -453,8 +355,9 @@
 			<div class="p-3 flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm">
 				<h2 class="text-sm font-semibold text-[var(--text-secondary)]">Thought Map</h2>
 				<div class="space-x-2">
-					<button class="text-xs px-3 py-1 rounded bg-[var(--brand-green-light)] text-[var(--text-primary)]">Run Dump</button>
-					<button class="text-xs px-3 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)]">Reset</button>
+					<button class="text-xs px-3 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)]">
+						Reset View
+					</button>
 				</div>
 			</div>
 
@@ -498,7 +401,7 @@
 
 		<!-- Resource Editor Modal -->
 		{#if isEditingResource}
-			<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
+			<div class="fixed inset-0 bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50" 
 					transition:fade={{ duration: 150 }}>
 				<div class="bg-[var(--bg-primary)] rounded-lg shadow-xl w-full max-w-2xl"
 						transition:slide={{ duration: 150 }}>

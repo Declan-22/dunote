@@ -9,13 +9,14 @@
   
   // Components
   import FlowView from '$lib/components/FlowView.svelte';
-  import Output from '$lib/components/Output.svelte';
-  import NotesList from '$lib/components/NotesList.svelte';
-  import TriggerNode from '$lib/components/TriggerNode.svelte';
-  import NodeLibrary from '$lib/components/NodeLibrary.svelte';
-  import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
-  import type { SiloNode } from '$lib/stores/siloStore';
-  import type { NodeType } from '$lib/types/nodes';
+import Output from '$lib/components/Output.svelte';
+import NotesList from '$lib/components/NotesList.svelte';
+import TriggerNode from '$lib/components/TriggerNode.svelte';
+import NodeLibrary from '$lib/components/NodeLibrary.svelte';
+import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
+import WorkspaceView from '$lib/components/WorkspaceView.svelte';
+import type { SiloNode } from '$lib/stores/siloStore';
+import type { NodeType } from '$lib/types/nodes';
   
   // Type definitions
   type ViewMode = 'flow' | 'output' | 'space' | 'calendar';
@@ -41,19 +42,19 @@
   $: if (silo) newSiloName = silo.name;
   
   onMount(async () => {
-    // Load data based on the URL
-    if (siloId && $user) {
-      // Determine the initial view based on the URL path
-      if ($page.url.pathname.includes('/output')) {
-        currentView = 'output';
-      } else if ($page.url.pathname.includes('/spaces')) {
-        currentView = 'space';
-        await loadSpaceData(siloId);
-      } else if ($page.url.pathname.includes('/calendar')) {
-        currentView = 'calendar';
-      }
+  // Load data based on the URL
+  if (siloId && $user) {
+    // Determine the initial view based on the URL path
+    if ($page.url.pathname.includes('/output')) {
+      currentView = 'output';
+    } else if ($page.url.pathname.includes('/spaces')) {
+      currentView = 'space';
+      // The component now handles its own data loading
+    } else if ($page.url.pathname.includes('/calendar')) {
+      currentView = 'calendar';
     }
-  });
+  }
+});
   
   async function loadSpaceData(id: string) {
     const { data, error } = await supabase
@@ -445,26 +446,16 @@
             +
           </button>
         </div>
+
+      {:else if currentView === 'space'}
+      <div class="h-full" in:fade={{ duration: 150 }}>
+        <WorkspaceView {siloId} />
+      </div>
       {:else if currentView === 'output'}
         <div class="h-full p-6 overflow-auto" in:fade={{ duration: 150 }}>
           <Output siloId={siloId} />
         </div>
-      {:else if currentView === 'space'}
-        <div class="h-full p-6 overflow-auto" in:fade={{ duration: 150 }}>
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Output Section -->
-            <div class="col-span-2 bg-[var(--bg-secondary)] rounded-xl shadow-md p-6 space-y-4">
-              <h2 class="text-xl font-semibold text-[var(--text-primary)]">Your Output</h2>
-              <Output siloId={siloId} />
-            </div>
 
-            <!-- Notes Sidebar -->
-            <div class="bg-[var(--bg-secondary)] rounded-xl shadow-md p-6 space-y-4">
-              <h2 class="text-xl font-semibold text-[var(--text-primary)]">Notes</h2>
-              <NotesList siloId={siloId} />
-            </div>
-          </div>
-        </div>
       {:else if currentView === 'calendar'}
         <div class="h-full p-6 overflow-auto" in:fade={{ duration: 150 }}>
           <div class="bg-[var(--bg-secondary)] rounded-xl shadow-md p-6">
