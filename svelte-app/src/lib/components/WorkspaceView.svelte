@@ -281,182 +281,308 @@
 			default: return status;
 		}
 	}
+
+	function getProgressColor(percentage: number) {
+        if (percentage < 33) return 'bg-red-500';
+        if (percentage < 66) return 'bg-yellow-500';
+        return 'bg-[var(--brand-green)]';
+    }
 </script>
 
 {#if isLoading}
-	<div class="flex justify-center items-center h-40">
-		<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--brand-green)]"></div>
-	</div>
+    <div class="flex justify-center items-center h-40">
+        <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--brand-green)]"></div>
+    </div>
 {:else if error}
-	<div class="text-center py-12">
-		<h2 class="text-xl font-medium text-[var(--text-secondary)]">Error</h2>
-		<p class="mt-2">{error.message}</p>
-	</div>
-{:else}
-	<div class="flex h-full w-full bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div class="text-center py-12">
+        <h2 class="text-xl font-medium text-[var(--text-secondary)]">Error</h2>
+        <p class="mt-2">{error.message}</p>
+    </div>
+	{:else}
+	<div class="flex flex-col md:flex-row h-screen w-full bg-[var(--bg-primary)] text-[var(--text-primary)]">
 
-		<!-- Left Column: Structured Tasks -->
-		<div class="w-1/3 border-r border-[var(--border-color)] flex flex-col">
-			
-			<!-- Structured Table -->
-			<div class="flex-1 overflow-y-auto p-4">
-				<h3 class="text-sm font-medium text-[var(--text-secondary)] mb-2">Structured Tasks</h3>
-				<table class="w-full text-xs text-left border-collapse">
-					<thead class="bg-[var(--bg-secondary)] text-[var(--text-secondary)] uppercase">
-						<tr>
-							<th class="px-3 py-2">Task</th>
-							<th class="px-3 py-2">Due</th>
-							<th class="px-3 py-2">Priority</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each filteredTasks.slice(0, 10) as task}
-							<tr class="bg-[var(--bg-primary)] border-b border-[var(--border-color)]">
-								<td class="px-3 py-2 flex items-center">
-									<input 
-										type="checkbox" 
-										checked={task.data?.isComplete} 
-										on:change={() => toggleNodeCompletion(task)}
-										class="w-3.5 h-3.5 mr-2 rounded border-[var(--border-color)] text-[var(--brand-green)]"
-									>
-									<span class={task.data?.isComplete ? "line-through text-[var(--text-secondary)]" : ""}>
-										{safeNodeTitle(task)}
-									</span>
-								</td>
-								<td class="px-3 py-2">{getNodeDueDate(task) || '—'}</td>
-								<td class="px-3 py-2">
-									<span class={`font-semibold ${
-										getNodePriority(task) === 'urgent' ? 'text-red-500' :
-										getNodePriority(task) === 'high' ? 'text-red-400' :
-										getNodePriority(task) === 'medium' ? 'text-amber-500' :
-										'text-emerald-500'
-									}`}>
-										{getNodePriority(task)}
-									</span>
-								</td>
-							</tr>
-						{/each}
-						{#if filteredTasks.length === 0}
-							<tr class="bg-[var(--bg-primary)]">
-								<td colspan="3" class="px-3 py-6 text-center text-[var(--text-secondary)]">
-									No tasks available yet. Create tasks in the Flow Editor.
-								</td>
-							</tr>
-						{/if}
-					</tbody>
-				</table>
-			</div>
+    <!-- Mobile Header -->
+    <div class="md:hidden p-4 border-b border-[var(--border-color)] space-y-3">
+        <div class="flex justify-between items-center">
+            <h1 class="text-lg font-semibold">{silo?.name || 'Untitled Silo'}</h1>
+            <select bind:value={selectedFilter} class="text-sm p-2 rounded bg-[var(--bg-secondary)]">
+                <option>Priority</option>
+                <option>Due Date</option>
+                <option>Project</option>
+            </select>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="flex-1 h-2 bg-gray-200 rounded-full">
+                <div class="h-2 rounded-full {getProgressColor(progressPercentage)}" 
+                     style={`width: ${progressPercentage}%`}></div>
+            </div>
+            <span class="text-sm">{progressPercentage}%</span>
+        </div>
+    </div>
+
+    <!-- Desktop Left Column -->
+    <div class="hidden md:flex md:w-1/3 flex-col border-r border-[var(--border-color)]">
+        <div class="p-4 border-b border-[var(--border-color)]">
+            <div class="flex items-center gap-3">
+                <div class="flex-1">
+                    <h2 class="text-lg font-semibold mb-2">{silo?.name || 'Untitled Silo'}</h2>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1 h-2 bg-gray-200 rounded-full">
+                            <div class="h-2 rounded-full {getProgressColor(progressPercentage)}" 
+                                 style={`width: ${progressPercentage}%`}></div>
+                        </div>
+                        <span class="text-sm">{completedTasks.length}/{totalTasks}</span>
+                    </div>
+                </div>
+                <select bind:value={selectedFilter} class="text-sm p-2 rounded bg-[var(--bg-secondary)]">
+                    <option>Priority</option>
+                    <option>Due Date</option>
+                    <option>Project</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Structured Tasks Table -->
+        <div class="flex-1 overflow-y-auto p-4">
+            <h3 class="text-sm font-medium text-[var(--text-secondary)] mb-3">Structured Tasks</h3>
+            <table class="w-full text-sm">
+                <thead class="bg-[var(--bg-secondary)] text-[var(--text-secondary)] uppercase">
+                    <tr>
+                        <th class="px-3 py-2">Task</th>
+                        <th class="px-3 py-2">Due</th>
+                        <th class="px-3 py-2">Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each filteredTasks as task}
+                        <tr class="bg-[var(--bg-primary)] border-b border-[var(--border-color)]">
+                            <td class="px-3 py-2 flex items-center">
+                                <input 
+                                    type="checkbox" 
+                                    checked={task.data?.isComplete} 
+                                    on:change={() => toggleNodeCompletion(task)}
+                                    class="w-3.5 h-3.5 mr-2 rounded border-[var(--border-color)] text-[var(--brand-green)]"
+                                >
+                                <span class={task.data?.isComplete ? "line-through text-[var(--text-secondary)]" : ""}>
+                                    {safeNodeTitle(task)}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2">{getNodeDueDate(task) || '—'}</td>
+                            <td class="px-3 py-2">
+                                <span class="priority-badge {getNodePriority(task).toLowerCase()}">
+                                    {getNodePriority(task)}
+                                </span>
+                            </td>
+                        </tr>
+                    {/each}
+                    {#if filteredTasks.length === 0}
+                        <tr class="bg-[var(--bg-primary)]">
+                            <td colspan="3" class="px-3 py-6 text-center text-[var(--text-secondary)]">
+                                No tasks available yet. Create tasks in the Flow Editor.
+                            </td>
+                        </tr>
+                    {/if}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Desktop Toolbar -->
+        <div class="hidden md:flex p-4 items-center justify-between border-b border-[var(--border-color)]">
+            <h2 class="text-lg font-semibold">Thought Map</h2>
+            <button class="px-4 py-2 text-sm rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary-hover)]">
+                Reset View
+            </button>
+        </div>
+
+        <!-- Mobile Task List -->
+        <div class="md:hidden flex-1 overflow-y-auto p-4">
+            <div class="space-y-3">
+                {#each filteredTasks as task}
+                <div class="bg-[var(--bg-secondary)] rounded-xl p-4 border border-[var(--border-color)]">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <input 
+                                type="checkbox" 
+                                checked={task.data?.isComplete} 
+                                on:change={() => toggleNodeCompletion(task)}
+                                class="w-4 h-4 accent-[var(--brand-green)]"
+                            >
+                            <span class={task.data?.isComplete ? "line-through text-[var(--text-secondary)]" : ""}>
+                                {safeNodeTitle(task)}
+                            </span>
+                        </div>
+                        <span class="priority-badge {getNodePriority(task).toLowerCase()}">
+                            {getNodePriority(task)}
+                        </span>
+                    </div>
+                    {#if getNodeDueDate(task)}
+                        <div class="mt-2 text-xs text-[var(--text-secondary)]">
+                            Due: {getNodeDueDate(task)}
+                        </div>
+                    {/if}
+                </div>
+                {/each}
+            </div>
+        </div>
+
+        <!-- Desktop Node Canvas -->
+        <div class="hidden md:block flex-1 overflow-y-auto p-6">
+            <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-7xl mx-auto">
+                {#each filteredTasks as node}
+                <div class="bg-[var(--bg-secondary)] rounded-xl p-4 border border-[var(--border-color)] hover:border-[var(--brand-green)] transition-colors">
+                    <h3 class="text-sm font-medium text-[var(--text-primary)] mb-2">Task Node</h3>
+                    <p class="text-sm text-[var(--text-secondary)]">{safeNodeTitle(node)}</p>
+                    <div class="mt-3 space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-[var(--text-secondary)]">Priority:</span>
+                            <span class="priority-badge {getNodePriority(node).toLowerCase()}">
+                                {getNodePriority(node)}
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-[var(--text-secondary)]">Due:</span>
+                            <span class="text-xs text-[var(--text-secondary)]">{getNodeDueDate(node) || 'Not set'}</span>
+                        </div>
+                    </div>
+                    <button class="mt-3 w-full text-xs px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--brand-green)]">
+                        Attach Resource
+                    </button>
+                </div>
+                {/each}
+
+                {#each resourceNodes as node}
+                <div class="bg-[var(--bg-secondary)] rounded-xl p-4 border border-[var(--border-color)] hover:border-[var(--brand-green)] transition-colors">
+                    <h3 class="text-sm font-medium text-[var(--text-primary)] mb-2">Resource Node</h3>
+                    <p class="text-sm text-[var(--text-secondary)] truncate">{safeNodeTitle(node)}</p>
+                    <button 
+                        on:click={() => openResourceEditor(node.id)}
+                        class="mt-3 w-full text-xs px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--brand-green)]"
+                    >
+                        Edit Resource
+                    </button>
+                </div>
+                {/each}
+
+                <div class="border-2 border-dashed border-[var(--border-color)] rounded-xl flex items-center justify-center hover:border-[var(--brand-green)] cursor-pointer">
+                    <p class="text-sm text-[var(--text-secondary)]">+ New Node</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <!-- RESOURCE EDITOR MODAL (ORIGINAL) -->
+        {#if isEditingResource}
+            <div class="fixed inset-0 bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50" 
+                 transition:fade={{ duration: 150 }}>
+                <div class="bg-[var(--bg-primary)] rounded-lg shadow-xl w-full max-w-2xl mx-2"
+                     transition:slide={{ duration: 150 }}>
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold text-[var(--text-primary)]">Edit Resource</h3>
+                            <button on:click={() => isEditingResource = false} class="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="resourceTitle" class="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                                Title
+                            </label>
+                            <input 
+                                id="resourceTitle"
+                                type="text" 
+                                bind:value={editableResourceTitle} 
+                                class="w-full px-3 py-2 border border-[var(--border-color)] rounded-md shadow-sm focus:outline-none focus:ring-[var(--brand-green)] focus:border-[var(--brand-green)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+                            />
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="resourceContent" class="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                                Content
+                            </label>
+                            <textarea 
+                                id="resourceContent"
+                                bind:value={editableResourceContent} 
+                                class="w-full px-3 py-2 border border-[var(--border-color)] rounded-md shadow-sm focus:outline-none focus:ring-[var(--brand-green)] focus:border-[var(--brand-green)] font-mono h-64 bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+                            ></textarea>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3">
+                            <button 
+                                on:click={() => isEditingResource = false} 
+                                class="px-4 py-2 border border-[var(--border-color)] rounded-md text-sm font-medium text-[var(--text-secondary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)]"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                on:click={saveResourceEdit} 
+                                class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[var(--brand-green)] hover:bg-[var(--brand-green-light)]"
+                            >
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+			{/if}
 		</div>
-
-		<!-- Middle Column: Node Canvas -->
-		<div class="w-2/3 flex flex-col">
-			
-			<!-- Toolbar -->
-			<div class="p-3 flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm">
-				<h2 class="text-sm font-semibold text-[var(--text-secondary)]">Thought Map</h2>
-				<div class="space-x-2">
-					<button class="text-xs px-3 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)]">
-						Reset View
-					</button>
-				</div>
-			</div>
-
-			<!-- Node Canvas Area -->
-			<div class="flex-1 grid grid-cols-3 gap-4 p-4 overflow-auto">
-				<!-- Task Nodes -->
-				{#each filteredTasks.slice(0, 6) as node}
-					<div class="rounded-xl bg-[var(--bg-secondary)] shadow p-3 border border-[var(--border-color)]">
-						<h3 class="text-sm font-medium text-[var(--text-primary)]">Task Node</h3>
-						<p class="text-xs text-[var(--text-secondary)]">{safeNodeTitle(node)}</p>
-						<div class="mt-2 space-y-2">
-							<p class="text-xs text-[var(--text-secondary)]">Priority: {getNodePriority(node)}</p>
-							<p class="text-xs text-[var(--text-secondary)]">Due: {getNodeDueDate(node) || 'Not set'}</p>
-						</div>
-						<div class="mt-2">
-							<button class="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border-color)]">Attach Resource</button>
-						</div>
-					</div>
-				{/each}
-
-				<!-- Resource Nodes -->
-				{#each resourceNodes.slice(0, Math.max(0, 6 - Math.min(filteredTasks.length, 6))) as node}
-					<div class="rounded-xl bg-[var(--bg-secondary)] shadow p-3 border border-[var(--border-color)]">
-						<h3 class="text-sm font-medium text-[var(--text-primary)]">Resource Node</h3>
-						<p class="text-xs text-[var(--text-secondary)]">{safeNodeTitle(node)}</p>
-						<div class="mt-2">
-							<button 
-								on:click={() => openResourceEditor(node.id)}
-								class="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border-color)]"
-							>Edit Resource</button>
-						</div>
-					</div>
-				{/each}
-
-				<!-- Empty Node for New Creation -->
-				<div class="rounded-xl border-2 border-[var(--border-color)] border-dashed p-3">
-					<p class="text-xs text-[var(--text-secondary)] text-center">Click to create new node</p>
-				</div>
-			</div>
-		</div>
-
-		<!-- Resource Editor Modal -->
-		{#if isEditingResource}
-			<div class="fixed inset-0 bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50" 
-					transition:fade={{ duration: 150 }}>
-				<div class="bg-[var(--bg-primary)] rounded-lg shadow-xl w-full max-w-2xl"
-						transition:slide={{ duration: 150 }}>
-					<div class="p-6">
-						<div class="flex justify-between items-center mb-4">
-							<h3 class="text-lg font-semibold text-[var(--text-primary)]">
-								Edit Resource
-							</h3>
-							<button on:click={() => isEditingResource = false} class="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-								<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-								</svg>
-							</button>
-						</div>
-						
-						<div class="mb-4">
-							<label for="resourceTitle" class="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-								Title
-							</label>
-							<input 
-								id="resourceTitle"
-								type="text" 
-								bind:value={editableResourceTitle} 
-								class="w-full px-3 py-2 border border-[var(--border-color)] rounded-md shadow-sm focus:outline-none focus:ring-[var(--brand-green)] focus:border-[var(--brand-green)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
-							/>
-						</div>
-						
-						<div class="mb-4">
-							<label for="resourceContent" class="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-								Content
-							</label>
-							<textarea 
-								id="resourceContent"
-								bind:value={editableResourceContent} 
-								class="w-full px-3 py-2 border border-[var(--border-color)] rounded-md shadow-sm focus:outline-none focus:ring-[var(--brand-green)] focus:border-[var(--brand-green)] font-mono h-64 bg-[var(--bg-secondary)] text-[var(--text-primary)]"
-							></textarea>
-						</div>
-						
-						<div class="flex justify-end space-x-3">
-							<button 
-								on:click={() => isEditingResource = false} 
-								class="px-4 py-2 border border-[var(--border-color)] rounded-md text-sm font-medium text-[var(--text-secondary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)]"
-							>
-								Cancel
-							</button>
-							<button 
-								on:click={saveResourceEdit} 
-								class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[var(--brand-green)] hover:bg-[var(--brand-green-light)]"
-							>
-								Save Changes
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
 		{/if}
-	</div>
-{/if}
+
+
+<style>
+   .task-card, .resource-card {
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        transition: all 0.2s ease;
+    }
+
+    .task-card:hover, .resource-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+	.priority-badge {
+    font-size: 0.75rem; /* text-xs */
+    font-weight: 500;   /* font-medium */
+    padding: 0.25rem 0.5rem; /* px-2 py-1 */
+    border-radius: 9999px; /* rounded-full */
+}
+
+.priority-badge.urgent {
+    background-color: #ffb3b3; /* bg-red-100 */
+    color: #991b1b; /* text-red-800 */
+}
+
+.priority-badge.high {
+    background-color: #ffb5a7; /* bg-orange-100 */
+    color: #9a3412; /* text-orange-800 */
+}
+
+.priority-badge.medium {
+    background-color: #fef9c3; /* bg-yellow-100 */
+    color: #854d0e; /* text-yellow-800 */
+}
+
+.priority-badge.low {
+    background-color: #dcfce7; /* bg-green-100 */
+    color: #166534; /* text-green-800 */
+}
+
+/* Scrollbar Styling */
+.overflow-y-auto::-webkit-scrollbar {
+        width: 8px;
+		height: 8px;
+    }
+    .overflow-y-auto::-webkit-scrollbar-track {
+        background: var(--bg-secondary);
+    }
+    .overflow-y-auto::-webkit-scrollbar-thumb {
+        background: var(--border-color);
+        border-radius: 4px;
+    }
+</style>

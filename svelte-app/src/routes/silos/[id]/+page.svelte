@@ -9,17 +9,18 @@
   
   // Components
   import FlowView from '$lib/components/FlowView.svelte';
-import Output from '$lib/components/Output.svelte';
-import NotesList from '$lib/components/NotesList.svelte';
-import TriggerNode from '$lib/components/TriggerNode.svelte';
-import NodeLibrary from '$lib/components/NodeLibrary.svelte';
-import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
-import WorkspaceView from '$lib/components/WorkspaceView.svelte';
-import type { SiloNode } from '$lib/stores/siloStore';
-import type { NodeType } from '$lib/types/nodes';
+  import Output from '$lib/components/Output.svelte';
+  import NotesList from '$lib/components/NotesList.svelte';
+  import TriggerNode from '$lib/components/TriggerNode.svelte';
+  import NodeLibrary from '$lib/components/NodeLibrary.svelte';
+  import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
+  import WorkspaceView from '$lib/components/WorkspaceView.svelte';
+  import Timeline from '$lib/components/Timeline.svelte';
+  import type { SiloNode } from '$lib/stores/siloStore';
+  import type { NodeType } from '$lib/types/nodes';
   
   // Type definitions
-  type ViewMode = 'flow' | 'output' | 'space' | 'calendar';
+  type ViewMode = 'flow' | 'output' | 'space' | 'calendar' | 'timeline';
   
   // State variables
   let currentView: ViewMode = 'flow';
@@ -42,19 +43,21 @@ import type { NodeType } from '$lib/types/nodes';
   $: if (silo) newSiloName = silo.name;
   
   onMount(async () => {
-  // Load data based on the URL
-  if (siloId && $user) {
-    // Determine the initial view based on the URL path
-    if ($page.url.pathname.includes('/output')) {
-      currentView = 'output';
-    } else if ($page.url.pathname.includes('/spaces')) {
-      currentView = 'space';
-      // The component now handles its own data loading
-    } else if ($page.url.pathname.includes('/calendar')) {
-      currentView = 'calendar';
+    // Load data based on the URL
+    if (siloId && $user) {
+      // Determine the initial view based on the URL path
+      if ($page.url.pathname.includes('/output')) {
+        currentView = 'output';
+      } else if ($page.url.pathname.includes('/spaces')) {
+        currentView = 'space';
+        // The component now handles its own data loading
+      } else if ($page.url.pathname.includes('/calendar')) {
+        currentView = 'calendar';
+      } else if ($page.url.pathname.includes('/timeline')) {
+        currentView = 'timeline';
+      }
     }
-  }
-});
+  });
   
   async function loadSpaceData(id: string) {
     const { data, error } = await supabase
@@ -92,6 +95,7 @@ import type { NodeType } from '$lib/types/nodes';
     const url = mode === 'flow' ? baseUrl : 
                 mode === 'output' ? `${baseUrl}/output` :
                 mode === 'space' ? `/spaces/${siloId}` :
+                mode === 'timeline' ? `${baseUrl}/timeline` :
                 `${baseUrl}/calendar`;
                 
     history.pushState(null, '', url);
@@ -393,6 +397,16 @@ import type { NodeType } from '$lib/types/nodes';
             <span class="sm:inline hidden">Workspace</span>
           </button>
           <button 
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'timeline' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            on:click={() => setViewMode('timeline')}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="20" x2="12" y2="10"></line>
+              <line x1="18" y1="20" x2="18" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="16"></line>
+            </svg>
+            <span class="sm:inline hidden">Timeline</span>
+          </button>
+          <button 
             class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'calendar' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
             on:click={() => setViewMode('calendar')}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -456,11 +470,20 @@ import type { NodeType } from '$lib/types/nodes';
           <Output siloId={siloId} />
         </div>
 
-      {:else if currentView === 'calendar'}
+        {:else if currentView === 'calendar'}
         <div class="h-full p-6 overflow-auto" in:fade={{ duration: 150 }}>
           <div class="bg-[var(--bg-secondary)] rounded-xl shadow-md p-6">
             <h2 class="text-xl font-semibold text-[var(--text-primary)] mb-4">Activity Calendar</h2>
             <CalendarHeatmap siloId={siloId} />
+          </div>
+        </div>
+      
+      <!-- Add Timeline View Here -->
+      {:else if currentView === 'timeline'}
+        <div class="h-full p-6 overflow-auto" in:fade={{ duration: 150 }}>
+          <div class="bg-[var(--bg-secondary)] rounded-xl shadow-md p-6">
+            <h2 class="text-xl font-semibold text-[var(--text-primary)] mb-4">Project Timeline</h2>
+            <Timeline {siloId} />
           </div>
         </div>
       {/if}

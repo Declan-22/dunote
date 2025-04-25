@@ -999,7 +999,7 @@ function extractQuotes(quote: string) { // Add type annotation
     </div>
   {/if}
 {/if}
-<p>Space ID: {spaceId}</p>
+
 
 
 
