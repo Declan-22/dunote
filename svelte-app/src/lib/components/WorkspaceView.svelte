@@ -432,25 +432,33 @@
         <div class="hidden md:block flex-1 overflow-y-auto p-6">
             <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-7xl mx-auto">
                 {#each filteredTasks as node}
-                <div class="bg-[var(--bg-secondary)] rounded-xl p-4 border border-[var(--border-color)] hover:border-[var(--brand-green)] transition-colors">
+                <a 
+                  href={`/silos/${siloId}/workspace/${node.id}`}
+                  class="block hover:border-[var(--brand-green)] transition-colors"
+                >
+                  <div class="bg-[var(--bg-secondary)] rounded-xl p-4 border border-[var(--border-color)]">
                     <h3 class="text-sm font-medium text-[var(--text-primary)] mb-2">Task Node</h3>
                     <p class="text-sm text-[var(--text-secondary)]">{safeNodeTitle(node)}</p>
                     <div class="mt-3 space-y-1">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs text-[var(--text-secondary)]">Priority:</span>
-                            <span class="priority-badge {getNodePriority(node).toLowerCase()}">
-                                {getNodePriority(node)}
-                            </span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs text-[var(--text-secondary)]">Due:</span>
-                            <span class="text-xs text-[var(--text-secondary)]">{getNodeDueDate(node) || 'Not set'}</span>
-                        </div>
-                    </div>
-                    <button class="mt-3 w-full text-xs px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--brand-green)]">
-                        Attach Resource
+                          <div class="flex items-center justify-between">
+                              <span class="text-xs text-[var(--text-secondary)]">Priority:</span>
+                              <span class="priority-badge {getNodePriority(node).toLowerCase()}">
+                                  {getNodePriority(node)}
+                              </span>
+                          </div>
+                          <div class="flex items-center justify-between">
+                              <span class="text-xs text-[var(--text-secondary)]">Due:</span>
+                              <span class="text-xs text-[var(--text-secondary)]">{getNodeDueDate(node) || 'Not set'}</span>
+                          </div>
+                      </div>
+                      <button 
+                      class="mt-3 w-full text-xs px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--brand-green)]"
+                      on:click|stopPropagation={() => {/* Existing Attach Resource logic */}}
+                    >
+                      Attach Resource
                     </button>
-                </div>
+                  </div>
+                </a>
                 {/each}
 
                 {#each resourceNodes as node}
@@ -465,7 +473,6 @@
                     </button>
                 </div>
                 {/each}
-
                 <div class="border-2 border-dashed border-[var(--border-color)] rounded-xl flex items-center justify-center hover:border-[var(--brand-green)] cursor-pointer">
                     <p class="text-sm text-[var(--text-secondary)]">+ New Node</p>
                 </div>

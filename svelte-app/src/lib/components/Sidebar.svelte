@@ -634,7 +634,7 @@ function resetToDefaults() {
                 class="w-full flex items-center p-3 rounded-lg transition-all duration-200
                   {$sidebarCollapsed ? 'hover:bg-[var(--bg-primary)]' : 'transform hover:scale-105'}
                   {$page.url.pathname === space.href 
-                    ? 'bg-[var(--brand-green)] text-white shadow-md' 
+                    ? 'bg-[var(--bg-primary)] text-white shadow-md' 
                     : 'hover:bg-[var(--bg-primary)] text-[var(--text-secondary)]'}"
               >
                 <div class="flex {!$sidebarCollapsed ? 'justify-start w-full' : ''}">
@@ -706,7 +706,7 @@ function resetToDefaults() {
                         class="w-full flex items-center p-2 rounded-lg transition-all duration-200
                           hover:bg-[var(--bg-primary)] 
                           {$page.url.pathname === space.href 
-                            ? 'bg-[var(--brand-green)] bg-opacity-20 text-[var(--brand-green)]' 
+                            ? 'bg-[var(--bg-primary)] bg-opacity-20 text-[var(--brand-green)]' 
                             : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}"
                       >
                         <svg class="w-4 h-4" fill="none" stroke={space.color || 'currentColor'} viewBox="0 0 24 24">
