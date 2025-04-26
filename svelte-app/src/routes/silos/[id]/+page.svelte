@@ -7,6 +7,7 @@
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/stores/userStore';
   
+  
   // Components
   import FlowView from '$lib/components/FlowView.svelte';
   import Output from '$lib/components/Output.svelte';

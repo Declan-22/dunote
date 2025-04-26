@@ -35,7 +35,7 @@ export async function initSpaces(userId: string) {
     if (!error && data) {
       const formattedSpaces = data.map(space => ({
         ...space,
-        href: `/space/${space.id}`, // Generate href client-side
+        href: `/spaces/${space.id}`, // Generate href client-side
         default: space.is_default
       }));
       
@@ -61,7 +61,7 @@ export async function addSpace(name: string, icon: string, userId: string, color
   if (data?.[0]) {
     const newSpace = {
       ...data[0],
-      href: `/space/${data[0].id}`, // Generate href here
+      href: `/spaces/${data[0].id}`, // Generate href here
       default: false
     };
     

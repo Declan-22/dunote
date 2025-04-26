@@ -1,559 +1,365 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { onMount, afterUpdate, tick } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import { supabase } from '$lib/supabaseClient';
 	import { user } from '$lib/stores/userStore';
-	import { siloStore, executeNodeFunction } from '$lib/stores/siloStore';
-	import { marked } from 'marked';
-	import { fade, slide } from 'svelte/transition';
-	import type { Silo, SiloNode, SiloEdge } from '$lib/stores/siloStore';
-
-	export let spaceId: string;
-	const siloId = $page.params.id;
-	let spaceName = '';
-	let isLoading = true;
-	let error: Error | null = null;
-	let silo: Silo | undefined;
-	let isEditing = false;
-	let isEditingResource = false;
-	let editingResourceNodeId = '';
-	let editableResourceContent = '';
-	let editableResourceTitle = '';
-	let newTaskInput = '';
-	let selectedFilter = 'Priority';
-
-	type SpaceData = {
-		id: string;
-		name: string;
-		icon: string;
-		color?: string;
-		created_at: string;
+	import type { User } from '@supabase/supabase-js';
+  
+	// Types
+	type Point = { x: number; y: number };
+	type DrawingTool = 'pencil' | 'eraser' | 'select';
+	type CanvasElement = {
+	  id: string;
+	  type: 'path' | 'shape';
+	  points: Point[];
+	  color: string;
+	  size: number;
 	};
-
-	let spaceData: SpaceData | null = null;
-
-	$: silo = $siloStore.find(s => s.id === siloId);
-	$: taskNodes = (silo?.nodes || []).filter(n => n.type === 'task') || [];
-	$: resourceNodes = (silo?.nodes || []).filter(n => n.type === 'resource') || [];
-	$: projectNodes = (silo?.nodes || []).filter(n => n.type === 'project') || [];
-	$: completedTasks = taskNodes.filter(n => n.data?.isComplete) || [];
-	$: totalTasks = taskNodes.length;
-	$: progressPercentage = totalTasks > 0 ? Math.round((completedTasks.length / totalTasks) * 100) : 0;
-
-	$: filteredTasks = (() => {
-		let tasks = [...taskNodes];
-		if (selectedFilter === 'Priority') {
-			return tasks.sort((a, b) => {
-				const priorityRank: Record<string, number> = { 'urgent': 0, 'high': 1, 'medium': 2, 'low': 3 };
-				return priorityRank[getNodePriority(a) || 'medium'] - priorityRank[getNodePriority(b) || 'medium'];
-			});
-		} else if (selectedFilter === 'Due Date') {
-			return tasks.sort((a, b) => {
-				const dateA = getNodeDueDate(a) ? new Date(getNodeDueDate(a)) : new Date(9999, 0, 1);
-				const dateB = getNodeDueDate(b) ? new Date(getNodeDueDate(b)) : new Date(9999, 0, 1);
-				return dateA.getTime() - dateB.getTime();
-			});
-		} else if (selectedFilter === 'Project') {
-			return tasks.sort((a, b) => {
-				const projA = getNodeProject(a) || '';
-				const projB = getNodeProject(b) || '';
-				return projA.localeCompare(projB);
-			});
+  
+	type Collaborator = {
+	  id: string;
+	  name: string;
+	  color: string;
+	  position: Point;
+	};
+  
+	// Props
+	export let width = '100%';
+	export let height = '100%';
+	export let readOnly = false;
+  
+	// State
+	let canvas: HTMLCanvasElement;
+	let ctx: CanvasRenderingContext2D;
+	let isDrawing = false;
+	let currentTool: DrawingTool = 'pencil';
+	let brushColor = '#000000';
+	let brushSize = 3;
+	let elements: CanvasElement[] = [];
+	let currentElement: CanvasElement | null = null;
+	let scale = 1;
+	let offsetX = 0;
+	let offsetY = 0;
+	let collaborators: Collaborator[] = [];
+	let presenceChannel: ReturnType<typeof supabase.channel> | null = null;
+  
+	// Utils
+	const generateId = () => Math.random().toString(36).substring(2, 9);
+	
+	const getCanvasCoordinates = (e: MouseEvent | TouchEvent): Point => {
+	  const rect = canvas.getBoundingClientRect();
+	  const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+	  const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+	  return {
+		x: (clientX - rect.left - offsetX) / scale,
+		y: (clientY - rect.top - offsetY) / scale
+	  };
+	};
+  
+	// Drawing functions
+	const startDrawing = (point: Point) => {
+	  if (readOnly) return;
+	  
+	  currentElement = {
+		id: generateId(),
+		type: currentTool === 'eraser' ? 'path' : 'path',
+		points: [point],
+		color: currentTool === 'eraser' ? '#ffffff' : brushColor,
+		size: brushSize
+	  };
+	  isDrawing = true;
+	};
+  
+	const continueDrawing = (point: Point) => {
+	  if (!isDrawing || !currentElement) return;
+	  currentElement.points.push(point);
+	  redrawCanvas();
+	};
+  
+	const endDrawing = () => {
+	  if (!isDrawing || !currentElement) return;
+	  elements.push(currentElement);
+	  currentElement = null;
+	  isDrawing = false;
+	};
+  
+	const redrawCanvas = () => {
+	  if (!ctx) return;
+	  
+	  ctx.clearRect(0, 0, canvas.width, canvas.height);
+	  ctx.save();
+	  ctx.translate(offsetX, offsetY);
+	  ctx.scale(scale, scale);
+  
+	  // Draw all elements
+	  elements.forEach(element => {
+		drawElement(element);
+	  });
+  
+	  // Draw current element in progress
+	  if (currentElement) {
+		drawElement(currentElement);
+	  }
+  
+	  ctx.restore();
+	  
+	  // Draw collaborators
+	  drawCollaborators();
+	};
+  
+	const drawElement = (element: CanvasElement) => {
+	  if (!ctx) return;
+	  
+	  ctx.beginPath();
+	  ctx.strokeStyle = element.color;
+	  ctx.lineWidth = element.size;
+	  ctx.lineCap = 'round';
+	  ctx.lineJoin = 'round';
+  
+	  element.points.forEach((point, i) => {
+		if (i === 0) {
+		  ctx.moveTo(point.x, point.y);
+		} else {
+		  ctx.lineTo(point.x, point.y);
 		}
-		return tasks;
-	})();
-
-	onMount(async () => {
-		isLoading = true;
-		if ($user) {
-			await loadSpaceData();
-			await loadSiloData();
+	  });
+  
+	  ctx.stroke();
+	};
+  
+	// Collaboration functions
+	const setupCollaboration = async () => {
+	  if (!browser || !$user) return;
+	  
+	  presenceChannel = supabase.channel('whiteboard-presence', {
+		config: {
+		  presence: {
+			key: $user.id
+		  }
 		}
-		isLoading = false;
+	  });
+  
+	  presenceChannel
+		.on('presence', { event: 'sync' }, () => {
+		  const newState = presenceChannel?.presenceState();
+		  if (newState) {
+			collaborators = Object.values(newState).flat() as Collaborator[];
+			redrawCanvas();
+		  }
+		})
+		.on('presence', { event: 'join' }, ({ key, newPresences }) => {
+		  console.log('New user joined:', key, newPresences);
+		})
+		.on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+		  console.log('User left:', key, leftPresences);
+		})
+		.subscribe(async (status) => {
+		  if (status === 'SUBSCRIBED' && $user) {
+			await presenceChannel?.track({
+			  id: $user.id,
+			  name: $user.email || 'Anonymous', // Using email as name fallback
+			  color: getRandomColor(),
+			  position: { x: 0, y: 0 }
+			});
+		  }
+		});
+  
+	  // Update cursor position
+	  const updateCursorPosition = throttle((e: MouseEvent) => {
+		if (!$user || !presenceChannel) return;
+		const pos = getCanvasCoordinates(e);
+		presenceChannel.track({
+		  id: $user.id,
+		  name: $user.email || 'Anonymous',
+		  color: getRandomColor(),
+		  position: pos
+		});
+	  }, 100);
+  
+	  canvas.addEventListener('mousemove', updateCursorPosition);
+  
+	  return () => {
+		canvas.removeEventListener('mousemove', updateCursorPosition);
+	  };
+	};
+  
+	const drawCollaborators = () => {
+	  if (!$user || !ctx) return;
+	  
+	  collaborators.forEach(collaborator => {
+		if (collaborator.id === $user?.id) return;
+		
+		const { x, y } = collaborator.position;
+		ctx.save();
+		ctx.translate(offsetX, offsetY);
+		ctx.scale(scale, scale);
+		
+		// Draw cursor
+		ctx.beginPath();
+		ctx.fillStyle = collaborator.color;
+		ctx.arc(x, y, 5, 0, Math.PI * 2);
+		ctx.fill();
+		
+		// Draw name
+		ctx.fillStyle = collaborator.color;
+		ctx.font = '12px Arial';
+		ctx.fillText(collaborator.name, x + 8, y - 8);
+		
+		ctx.restore();
+	  });
+	};
+  
+	const getRandomColor = () => {
+	  const colors = ['#FF5252', '#FF4081', '#E040FB', '#7C4DFF', '#536DFE', '#448AFF', '#40C4FF', '#18FFFF', '#64FFDA', '#69F0AE', '#B2FF59', '#EEFF41', '#FFFF00', '#FFD740', '#FFAB40', '#FF6E40'];
+	  return colors[Math.floor(Math.random() * colors.length)];
+	};
+  
+	const throttle = <T extends unknown[]>(fn: (...args: T) => void, delay: number) => {
+	  let lastCall = 0;
+	  return (...args: T) => {
+		const now = new Date().getTime();
+		if (now - lastCall < delay) return;
+		lastCall = now;
+		return fn(...args);
+	  };
+	};
+  
+	// Event handlers
+	const handleMouseDown = (e: MouseEvent) => {
+	  if (e.button !== 0) return;
+	  startDrawing(getCanvasCoordinates(e));
+	};
+  
+	const handleMouseMove = (e: MouseEvent) => {
+	  if (!isDrawing) return;
+	  continueDrawing(getCanvasCoordinates(e));
+	};
+  
+	const handleMouseUp = () => endDrawing();
+  
+	const handleTouchStart = (e: TouchEvent) => {
+	  e.preventDefault();
+	  startDrawing(getCanvasCoordinates(e));
+	};
+  
+	const handleTouchMove = (e: TouchEvent) => {
+	  e.preventDefault();
+	  if (!isDrawing) return;
+	  continueDrawing(getCanvasCoordinates(e));
+	};
+  
+	const handleTouchEnd = () => endDrawing();
+  
+	// Initialize
+	onMount(() => {
+	  if (!browser) return;
+	  
+	  ctx = canvas.getContext('2d')!;
+	  resizeCanvas();
+  
+	  // Event listeners
+	  canvas.addEventListener('mousedown', handleMouseDown);
+	  canvas.addEventListener('mousemove', handleMouseMove);
+	  canvas.addEventListener('mouseup', handleMouseUp);
+	  canvas.addEventListener('mouseleave', handleMouseUp);
+	  
+	  canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+	  canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+	  canvas.addEventListener('touchend', handleTouchEnd);
+  
+	  // Setup collaboration if user exists
+	  if ($user) {
+		setupCollaboration();
+	  }
+  
+	  return () => {
+		canvas.removeEventListener('mousedown', handleMouseDown);
+		canvas.removeEventListener('mousemove', handleMouseMove);
+		canvas.removeEventListener('mouseup', handleMouseUp);
+		canvas.removeEventListener('mouseleave', handleMouseUp);
+		
+		canvas.removeEventListener('touchstart', handleTouchStart);
+		canvas.removeEventListener('touchmove', handleTouchMove);
+		canvas.removeEventListener('touchend', handleTouchEnd);
+  
+		// Clean up presence channel
+		if (presenceChannel) {
+		  supabase.removeChannel(presenceChannel);
+		}
+	  };
 	});
-
-	async function loadSpaceData() {
-		const { data, error } = await supabase
-			.from('spaces')
-			.select('*')
-			.eq('id', spaceId)
-			.single();
-
-		if (!error && data) {
-			spaceData = data;
-			spaceName = data.name;
-		}
-	}
-
-	async function loadSiloData() {
-		// This would load your silo data if needed
-		// Assuming the siloStore already handles this
-		await tick();
-	}
-
-	function getNodeStatus(node: SiloNode) {
-		return node.data?.result?.new_status || node.data?.status || 'not-started';
-	}
-
-	function getNodePriority(node: SiloNode) {
-		return node.data?.priority || 'medium';
-	}
-
-	function getNodeDueDate(node: SiloNode) {
-		return node.data?.dueDate || '';
-	}
-
-	function getNodeProject(node: SiloNode) {
-		return node.data?.project || '';
-	}
-
-	function safeNodeTitle(node: SiloNode) {
-		return node.data?.title || 'Untitled Node';
-	}
-
-	function updatePriority(node: SiloNode, priority: string) {
-		if (node && node.data) {
-			node.data.priority = priority;
-			// Update the node in the siloStore
-			$siloStore = [...$siloStore];
-			updateProjectProgress();
-			saveNode(node);
-		}
-	}
-
-	function toggleNodeCompletion(node: SiloNode) {
-		if (node && node.data) {
-			node.data.isComplete = !node.data.isComplete;
-			// Update the node in the siloStore
-			$siloStore = [...$siloStore];
-			updateProjectProgress();
-			saveNode(node);
-		}
-	}
-
-	function getPriorityClass(priority: string) {
-		if (!priority) return 'bg-gray-100 text-gray-800';
-		
-		switch(priority.toLowerCase().trim()) {
-			case 'high':
-				return 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-100';
-			case 'urgent':
-				return 'bg-red-300 text-red-800 dark:bg-red-900 dark:text-red-100';
-			case 'medium':
-				return 'bg-amber-200 text-amber-800 dark:bg-amber-900 dark:text-amber-100';
-			case 'low':
-				return 'bg-emerald-200 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100';
-			default:
-				return 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
-		}
-	}
-
-	function formatTimeAgo(timestamp: string) {
-		if (!timestamp) return '';
-		
-		const now = new Date();
-		const updated = new Date(timestamp);
-		const diff = Math.floor((now.getTime() - updated.getTime()) / 1000);
-		
-		if (diff < 60) return 'just now';
-		if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-		if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-		return `${Math.floor(diff / 86400)}d ago`;
-	}
-
-	function openResourceEditor(nodeId: string) {
-		const node = silo?.nodes.find(n => n.id === nodeId);
-		if (!node) return;
-		
-		editingResourceNodeId = nodeId;
-		editableResourceContent = node.data?.sourceContent || '';
-		editableResourceTitle = node.data?.title || '';
-		isEditingResource = true;
-	}
-
-	async function saveResourceEdit() {
-		if (!editingResourceNodeId) return;
-		
-		await updateResourceContent(editingResourceNodeId, editableResourceContent, editableResourceTitle);
-		isEditingResource = false;
-	}
-
-	async function updateResourceContent(nodeId: string, newContent: string, newTitle: string) {
-		const node = silo?.nodes.find(n => n.id === nodeId);
-		if (!node) return;
-		
-		try {
-			// Update local store
-			const updatedData = {
-				...node.data,
-				sourceContent: newContent,
-				title: newTitle || node.data.title
-			};
-			
-			updateNode(siloId, nodeId, { data: updatedData });
-			
-			// Sync with database
-			const { error } = await supabase
-				.from('nodes')
-				.update({ data: updatedData })
-				.eq('id', nodeId);
-				
-			if (error) throw error;
-			
-			// If extraction nodes are connected, you might want to re-run them
-			const extractionEdges = silo?.edges.filter(e => 
-				e.source === nodeId && 
-				silo.nodes.find(n => n.id === e.target)?.type === 'extract'
-			) || [];
-			
-			for (const edge of extractionEdges) {
-				await executeNodeFunction(siloId, edge.target, 'extract_quotes');
-			}
-			
-			return true;
-		} catch (err) {
-			console.error('Failed to update resource content:', err);
-			return false;
-		}
-	}
-
-	function updateNode(siloId: string, nodeId: string, updates: any) {
-		// Update node in local store
-		if (!silo) return;
-		
-		const nodeIndex = silo.nodes.findIndex(n => n.id === nodeId);
-		if (nodeIndex === -1) return;
-		
-		// Create updated node
-		const updatedNode = {
-			...silo.nodes[nodeIndex],
-			...updates,
-			data: {
-				...silo.nodes[nodeIndex].data,
-				...(updates.data || {})
-			}
-		};
-		
-		// Update in siloStore
-		$siloStore = $siloStore.map(s => {
-			if (s.id === siloId) {
-				return {
-					...s,
-					nodes: s.nodes.map(n => n.id === nodeId ? updatedNode : n)
-				};
-			}
-			return s;
-		});
-	}
-
-	function updateProjectProgress() {
-		// Add type annotation for projectUpdates
-		const projectUpdates: Record<string, {
-			progress: number;
-			tasks_completed: number;
-			tasks_total: number;
-		}> = {};
-
-		// Add optional chaining for silo
-		if (!silo) return;
-
-		projectNodes.forEach(projectNode => {
-			// Add type safety for task filtering
-			const connectedTasks = taskNodes.filter(task => 
-				getNodeProject(task) === safeNodeTitle(projectNode)
-			);
-			
-			const totalTasks = connectedTasks.length;
-			const completedTasks = connectedTasks.filter(t => t.data?.isComplete).length;
-			const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-			
-			projectUpdates[projectNode.id] = {
-				progress,
-				tasks_completed: completedTasks,
-				tasks_total: totalTasks
-			};
-		});
-
-		// Update all projects with null checks
-		Object.entries(projectUpdates).forEach(([nodeId, data]) => {
-			const node = silo?.nodes.find(n => n.id === nodeId);
-			if (!node) return;
-
-			updateNode(siloId, nodeId, {
-				data: {
-					...node.data,
-					result: data
-				}
-			});
-		});
-	}
-
-	async function saveNode(node: SiloNode) {
-		try {
-			const { error } = await supabase
-				.from('nodes')
-				.update({ data: node.data })
-				.eq('id', node.id);
-			
-			if (error) throw error;
-		} catch (err) {
-			console.error('Failed to save node:', err);
-		}
-	}
-
-	async function createNewTask() {
-		if (!newTaskInput.trim() || !silo) return;
-
-		try {
-			// Create a new node object
-			const newTask = {
-				id: `task-${Date.now()}`,
-				type: 'task',
-				position: { x: 0, y: 0 },
-				data: {
-					title: newTaskInput,
-					isComplete: false,
-					status: 'not-started',
-					priority: 'medium',
-					dueDate: '',
-					project: ''
-				},
-				updated_at: new Date().toISOString()
-			};
-
-			// Add to local store first
-			$siloStore = $siloStore.map(s => {
-				if (s.id === siloId) {
-					return {
-						...s,
-						nodes: [...s.nodes, newTask]
-					};
-				}
-				return s;
-			});
-
-			// Save to database
-			const { error } = await supabase
-				.from('nodes')
-				.insert({
-					id: newTask.id,
-					silo_id: siloId,
-					type: 'task',
-					position: newTask.position,
-					data: newTask.data
-				});
-
-			if (error) throw error;
-			
-			// Clear input
-			newTaskInput = '';
-		} catch (err) {
-			console.error('Failed to create task:', err);
-			error = err as Error;
-		}
-	}
-
-	function getStatusDisplay(status: string) {
-		switch(status) {
-			case 'not-started': return 'Not Started';
-			case 'in-progress': return 'In Progress';
-			case 'completed': return 'Completed';
-			default: return status;
-		}
-	}
-</script>
-
-{#if isLoading}
-	<div class="flex justify-center items-center h-40">
-		<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--brand-green)]"></div>
+  
+	const resizeCanvas = () => {
+	  if (!canvas) return;
+	  const rect = canvas.parentElement?.getBoundingClientRect();
+	  if (rect) {
+		canvas.width = rect.width;
+		canvas.height = rect.height;
+		redrawCanvas();
+	  }
+	};
+  </script>
+  
+  <div class="whiteboard-container" style="width: {width}; height: {height}">
+	<canvas
+	  bind:this={canvas}
+	  class="whiteboard"
+	  style="cursor: {currentTool === 'select' ? 'default' : 'crosshair'}"
+	/>
+	
+	<div class="toolbar">
+	  <button
+		class:active={currentTool === 'pencil'}
+		on:click={() => currentTool = 'pencil'}
+	  >
+		✏️ Pencil
+	  </button>
+	  <button
+		class:active={currentTool === 'eraser'}
+		on:click={() => currentTool = 'eraser'}
+	  >
+		🧽 Eraser
+	  </button>
 	</div>
-{:else if error}
-	<div class="text-center py-12">
-		<h2 class="text-xl font-medium text-[var(--text-secondary)]">Error</h2>
-		<p class="mt-2">{error.message}</p>
-	</div>
-{:else if !spaceData}
-	<div class="text-center py-12">
-		<h2 class="text-xl font-medium text-[var(--text-secondary)]">Space not found</h2>
-		<p class="mt-2">This space doesn't exist or you don't have access to it.</p>
-	</div>
-{:else}
-	<div class="flex h-full w-full bg-[var(--bg-primary)] text-[var(--text-primary)]">
-
-		<!-- Left Column: Thought Input + Structured Tasks -->
-		<div class="w-1/3 border-r border-[var(--border-color)] flex flex-col">
-			
-			<!-- Dump Input -->
-			<div class="p-4 border-b border-[var(--border-color)]">
-				<h2 class="text-sm font-medium text-[var(--text-secondary)] mb-1">Input Your Thoughts</h2>
-				<form on:submit|preventDefault={createNewTask}>
-					<input
-						bind:value={newTaskInput}
-						type="text"
-						placeholder="e.g. Write product launch blog post"
-						class="w-full px-4 py-2 border border-[var(--border-color)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--brand-green)]"
-					/>
-				</form>
-			</div>
-
-			<!-- Structured Table -->
-			<div class="flex-1 overflow-y-auto p-4">
-				<h3 class="text-sm font-medium text-[var(--text-secondary)] mb-2">Structured Tasks</h3>
-				<table class="w-full text-xs text-left border-collapse">
-					<thead class="bg-[var(--bg-secondary)] text-[var(--text-secondary)] uppercase">
-						<tr>
-							<th class="px-3 py-2">Task</th>
-							<th class="px-3 py-2">Due</th>
-							<th class="px-3 py-2">Priority</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each filteredTasks.slice(0, 10) as task}
-							<tr class="bg-[var(--bg-primary)] border-b border-[var(--border-color)]">
-								<td class="px-3 py-2 flex items-center">
-									<input 
-										type="checkbox" 
-										checked={task.data?.isComplete} 
-										on:change={() => toggleNodeCompletion(task)}
-										class="w-3.5 h-3.5 mr-2 rounded border-[var(--border-color)] text-[var(--brand-green)]"
-									>
-									<span class={task.data?.isComplete ? "line-through text-[var(--text-secondary)]" : ""}>
-										{safeNodeTitle(task)}
-									</span>
-								</td>
-								<td class="px-3 py-2">{getNodeDueDate(task) || '—'}</td>
-								<td class="px-3 py-2">
-									<span class={`font-semibold ${
-										getNodePriority(task) === 'urgent' ? 'text-red-500' :
-										getNodePriority(task) === 'high' ? 'text-red-400' :
-										getNodePriority(task) === 'medium' ? 'text-amber-500' :
-										'text-emerald-500'
-									}`}>
-										{getNodePriority(task)}
-									</span>
-								</td>
-							</tr>
-						{/each}
-						{#if filteredTasks.length === 0}
-							<tr class="bg-[var(--bg-primary)]">
-								<td colspan="3" class="px-3 py-6 text-center text-[var(--text-secondary)]">
-									No tasks available. Add your first task above.
-								</td>
-							</tr>
-						{/if}
-					</tbody>
-				</table>
-			</div>
-		</div>
-
-		<!-- Middle Column: Node Canvas -->
-		<div class="w-2/3 flex flex-col">
-			
-			<!-- Toolbar -->
-			<div class="p-3 flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-primary)] shadow-sm">
-				<h2 class="text-sm font-semibold text-[var(--text-secondary)]">Thought Map</h2>
-				<div class="space-x-2">
-					<button class="text-xs px-3 py-1 rounded bg-[var(--brand-green-light)] text-[var(--text-primary)]">Run Dump</button>
-					<button class="text-xs px-3 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)]">Reset</button>
-				</div>
-			</div>
-
-			<!-- Node Canvas Area -->
-			<div class="flex-1 grid grid-cols-3 gap-4 p-4 overflow-auto">
-				<!-- Task Nodes -->
-				{#each filteredTasks.slice(0, 6) as node}
-					<div class="rounded-xl bg-[var(--bg-secondary)] shadow p-3 border border-[var(--border-color)]">
-						<h3 class="text-sm font-medium text-[var(--text-primary)]">Task Node</h3>
-						<p class="text-xs text-[var(--text-secondary)]">{safeNodeTitle(node)}</p>
-						<div class="mt-2 space-y-2">
-							<p class="text-xs text-[var(--text-secondary)]">Priority: {getNodePriority(node)}</p>
-							<p class="text-xs text-[var(--text-secondary)]">Due: {getNodeDueDate(node) || 'Not set'}</p>
-						</div>
-						<div class="mt-2">
-							<button class="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border-color)]">Attach Resource</button>
-						</div>
-					</div>
-				{/each}
-
-				<!-- Resource Nodes -->
-				{#each resourceNodes.slice(0, Math.max(0, 6 - Math.min(filteredTasks.length, 6))) as node}
-					<div class="rounded-xl bg-[var(--bg-secondary)] shadow p-3 border border-[var(--border-color)]">
-						<h3 class="text-sm font-medium text-[var(--text-primary)]">Resource Node</h3>
-						<p class="text-xs text-[var(--text-secondary)]">{safeNodeTitle(node)}</p>
-						<div class="mt-2">
-							<button 
-								on:click={() => openResourceEditor(node.id)}
-								class="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border-color)]"
-							>Edit Resource</button>
-						</div>
-					</div>
-				{/each}
-
-				<!-- Empty Node for New Creation -->
-				<div class="rounded-xl border-2 border-[var(--border-color)] border-dashed p-3">
-					<p class="text-xs text-[var(--text-secondary)] text-center">Click to create new node</p>
-				</div>
-			</div>
-		</div>
-
-		<!-- Resource Editor Modal -->
-		{#if isEditingResource}
-			<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
-					transition:fade={{ duration: 150 }}>
-				<div class="bg-[var(--bg-primary)] rounded-lg shadow-xl w-full max-w-2xl"
-						transition:slide={{ duration: 150 }}>
-					<div class="p-6">
-						<div class="flex justify-between items-center mb-4">
-							<h3 class="text-lg font-semibold text-[var(--text-primary)]">
-								Edit Resource
-							</h3>
-							<button on:click={() => isEditingResource = false} class="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-								<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-								</svg>
-							</button>
-						</div>
-						
-						<div class="mb-4">
-							<label for="resourceTitle" class="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-								Title
-							</label>
-							<input 
-								id="resourceTitle"
-								type="text" 
-								bind:value={editableResourceTitle} 
-								class="w-full px-3 py-2 border border-[var(--border-color)] rounded-md shadow-sm focus:outline-none focus:ring-[var(--brand-green)] focus:border-[var(--brand-green)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
-							/>
-						</div>
-						
-						<div class="mb-4">
-							<label for="resourceContent" class="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-								Content
-							</label>
-							<textarea 
-								id="resourceContent"
-								bind:value={editableResourceContent} 
-								class="w-full px-3 py-2 border border-[var(--border-color)] rounded-md shadow-sm focus:outline-none focus:ring-[var(--brand-green)] focus:border-[var(--brand-green)] font-mono h-64 bg-[var(--bg-secondary)] text-[var(--text-primary)]"
-							></textarea>
-						</div>
-						
-						<div class="flex justify-end space-x-3">
-							<button 
-								on:click={() => isEditingResource = false} 
-								class="px-4 py-2 border border-[var(--border-color)] rounded-md text-sm font-medium text-[var(--text-secondary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)]"
-							>
-								Cancel
-							</button>
-							<button 
-								on:click={saveResourceEdit} 
-								class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[var(--brand-green)] hover:bg-[var(--brand-green-light)]"
-							>
-								Save Changes
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
-		{/if}
-	</div>
-{/if}
+  </div>
+  
+  <style>
+	/* Same styles as before */
+	.whiteboard-container {
+	  position: relative;
+	  overflow: hidden;
+	  background: white;
+	  border: 1px solid #e0e0e0;
+	}
+  
+	.whiteboard {
+	  display: block;
+	  background: white;
+	}
+  
+	.toolbar {
+	  position: absolute;
+	  bottom: 20px;
+	  left: 50%;
+	  transform: translateX(-50%);
+	  display: flex;
+	  gap: 8px;
+	  background: white;
+	  padding: 8px;
+	  border-radius: 8px;
+	  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	}
+  
+	button {
+	  padding: 8px 12px;
+	  border: none;
+	  border-radius: 4px;
+	  background: #f0f0f0;
+	  cursor: pointer;
+	}
+  
+	button.active {
+	  background: #007aff;
+	  color: white;
+	}
+  </style>
