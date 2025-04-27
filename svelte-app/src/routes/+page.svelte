@@ -1,6 +1,7 @@
 
 <script lang="ts">
   import TaskDump from '$lib/components/TaskDump.svelte';
+  import IOSNotificationTasks from '$lib/components/IOSNotificationTasks.svelte'; // Add this import
   import { theme } from '$lib/stores/themeStore';
   import { goto } from '$app/navigation';
   import { siloStore } from '$lib/stores/siloStore';
@@ -164,12 +165,12 @@
   <div class="max-w-3xl mx-auto">
     <div class="flex items-center justify-center mb-6">
       <img src="dunotepen.svg" alt="dunote logo" class="h-12 w-12 mr-3 theme-logo" />
-      <p class="text-xl  text-center font-serif text-[var(--text-primary)]">
+      <p class="text-xl text-center font-serif text-[var(--text-primary)]">
         {welcomeMessage}
       </p>
     </div>
 
-    <div class="relative mt-25">
+    <div class="relative mt-25 mb-55">
       <TaskDump bind:value={taskInput} on:process={handleProcess} />
       
       {#if isLoading}
@@ -178,7 +179,12 @@
           <span class="ml-3 text-white font-medium">Generating Smart Plan...</span>
         </div>
       {/if}
+
+
     </div>
+    
+    <!-- Add the iOS-style notification tasks component here -->
+    <IOSNotificationTasks />
   </div>
 </main>
 
