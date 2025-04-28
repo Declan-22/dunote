@@ -17,6 +17,9 @@
 	let editableResourceContent = '';
 	let editableResourceTitle = '';
 	let selectedFilter = 'Priority';
+    let shareLink: string | null = null;
+    let isGeneratingLink = false;
+    
 
     $: commissionNodes = (silo?.nodes || []).filter(n => ['client', 'contract', 'payment', 'deliverable'].includes(n.type)) || [];
     $: hasCommissionNodes = commissionNodes.length > 0;
@@ -69,6 +72,47 @@
 		// Assuming the siloStore already handles this
 		await tick();
 	}
+
+    async function generateShareLink(): Promise<string> {
+    console.log("Starting link generation...");
+    if (!clientNode) {
+      throw new Error('Client information not available');
+    }
+
+    try {
+      // Generate a unique token
+      const token = crypto.randomUUID();
+      console.log("Generated token:", token)
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 1 week expiration
+      
+      // Insert into database
+      const { error } = await supabase
+      
+        .from('share_tokens')
+        .insert([{
+          token,
+          silo_id: siloId,
+          client_node_id: clientNode.id,
+          expires_at: expiresAt.toISOString()
+        }]);
+
+      if (error) {
+        throw error;
+      }
+
+      // Update the client node with expiry date if needed
+      if (clientNode.data) {
+        clientNode.data.share_expiry = expiresAt.toISOString();
+      }
+
+      // Return the full shareable URL
+      return `${window.location.origin}/share/${token}`;
+    } catch (error) {
+      console.error('Failed to generate share link:', error);
+      throw new Error('Failed to create share link. Please try again.');
+    }
+  }
 
 	function getNodeStatus(node: SiloNode) {
 		return node.data?.result?.new_status || node.data?.status || 'not-started';
@@ -294,6 +338,7 @@
         if (percentage < 66) return 'bg-yellow-500';
         return 'bg-[var(--brand-green)]';
     }
+
 </script>
 
 {#if isLoading}
@@ -333,25 +378,49 @@
         {#if hasCommissionNodes}
         
         <div class="p-4 border-b border-[var(--border-color)] space-y-3">
-            <h3 class="text-sm font-medium text-[var(--text-secondary)]">Client Sharing</h3>
+        <h3 class="text-sm font-medium text-[var(--text-secondary)]">Client Sharing</h3>
+        {#if shareLink}
             <div class="flex items-center gap-2">
-                <input 
-                    type="text" 
-                    value={shareLink} 
-                    readonly 
-                    class="flex-1 text-xs p-2 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] truncate"
-                />
-                <button 
-                    on:click={() => navigator.clipboard.writeText(shareLink)}
-                    class="px-3 py-2 text-xs rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary-hover)]"
-                >
-                    Copy
-                </button>
+            <input 
+                type="text" 
+                value={shareLink} 
+                readonly 
+                class="flex-1 text-xs p-2 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] truncate"
+            />
+            <button 
+                on:click={() => navigator.clipboard.writeText(shareLink || '')}
+                class="px-3 py-2 text-xs rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary-hover)]"
+            >
+                Copy
+            </button>
             </div>
+            {#if clientNode?.data?.share_expiry}
             <div class="text-xs text-[var(--text-secondary)]">
-                Share this link with your client to view progress updates
+                Expires on {new Date(clientNode.data.share_expiry).toLocaleDateString()}
             </div>
+            {/if}
+        {:else}
+        <button 
+        on:click={async () => {
+          isGeneratingLink = true;
+          try {
+            shareLink = await generateShareLink();
+          } catch (error) {
+            alert(error.message);
+          } finally {
+            isGeneratingLink = false;
+          }
+        }}
+        disabled={isGeneratingLink}
+        class="w-full text-xs px-4 py-2 rounded bg-[var(--brand-green)] text-white hover:bg-[var(--brand-green-light)] disabled:opacity-50"
+      >
+        {isGeneratingLink ? 'Generating...' : 'Generate Secure Share Link'}
+      </button>
+        {/if}
         </div>
+        {/if}
+        
+        {#if clientNode}
         {/if}
         {#if hasCommissionNodes}
         <div class="p-4 border-b border-[var(--border-color)] space-y-3">
