@@ -695,6 +695,8 @@ export async function executeNodeFunction(siloId: string, nodeId: string, functi
     }
   }
 
+
+
 async function processFunction(functionId: string, node: SiloNode, silo: Silo, siloId: string, nodeId: string) {
     let result;
   
@@ -992,10 +994,57 @@ async function processNodeExecution(node: SiloNode, silo: Silo) {
       return processMilestoneNode(node, inputData);
     case 'project':
       return processProjectNode(node, inputData);
+    case 'client':
+      return processClientNode(node, inputData);
+    case 'contract':
+      return processContractNode(node, inputData);
+    case 'payment':
+      return processPaymentNode(node, inputData);
+    case 'deliverable':
+      return processDeliverableNode(node, inputData);
     // Add more node types as needed
     default:
       return { message: `Processed ${node.type} node`, timestamp: new Date().toISOString() };
   }
+}
+
+function processClientNode(node: SiloNode, inputs: any[]) {
+  return {
+    type: 'client',
+    company: node.data.company,
+    contacts: node.data.contacts || [],
+    agreements: inputs.filter(i => i.nodeType === 'contract')
+  };
+}
+
+function processContractNode(node: SiloNode, inputs: any[]) {
+  const client = inputs.find(i => i.nodeType === 'client');
+  return {
+    type: 'contract',
+    status: node.data.status || 'draft',
+    terms: node.data.terms,
+    client: client?.data
+  };
+}
+
+function processPaymentNode(node: SiloNode, inputs: any[]) {
+  const contract = inputs.find(i => i.nodeType === 'contract');
+  return {
+    type: 'payment',
+    amount: node.data.amount,
+    status: node.data.status || 'pending',
+    contract: contract?.data
+  };
+}
+
+function processDeliverableNode(node: SiloNode, inputs: any[]) {
+  const contract = inputs.find(i => i.nodeType === 'contract');
+  return {
+    type: 'deliverable',
+    status: node.data.status || 'pending',
+    requirements: node.data.requirements,
+    contract: contract?.data
+  };
 }
 
 // Collect inputs from connected nodes

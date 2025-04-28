@@ -18,6 +18,13 @@
 	let editableResourceTitle = '';
 	let selectedFilter = 'Priority';
 
+    $: commissionNodes = (silo?.nodes || []).filter(n => ['client', 'contract', 'payment', 'deliverable'].includes(n.type)) || [];
+    $: hasCommissionNodes = commissionNodes.length > 0;
+    $: clientNode = commissionNodes.find(n => n.type === 'client');
+    $: contractNode = commissionNodes.find(n => n.type === 'contract');
+    $: shareLink = hasCommissionNodes ? `${window.location.origin}/share/${siloId}/${clientNode?.id}` : '';
+
+
 	$: silo = $siloStore.find(s => s.id === siloId);
 	$: taskNodes = (silo?.nodes || []).filter(n => n.type === 'task') || [];
 	$: resourceNodes = (silo?.nodes || []).filter(n => n.type === 'resource') || [];
@@ -322,10 +329,52 @@
 
     <!-- Desktop Left Column -->
     <div class="hidden md:flex md:w-1/3 flex-col border-r border-[var(--border-color)]">
+        
+        {#if hasCommissionNodes}
+        
+        <div class="p-4 border-b border-[var(--border-color)] space-y-3">
+            <h3 class="text-sm font-medium text-[var(--text-secondary)]">Client Sharing</h3>
+            <div class="flex items-center gap-2">
+                <input 
+                    type="text" 
+                    value={shareLink} 
+                    readonly 
+                    class="flex-1 text-xs p-2 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] truncate"
+                />
+                <button 
+                    on:click={() => navigator.clipboard.writeText(shareLink)}
+                    class="px-3 py-2 text-xs rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary-hover)]"
+                >
+                    Copy
+                </button>
+            </div>
+            <div class="text-xs text-[var(--text-secondary)]">
+                Share this link with your client to view progress updates
+            </div>
+        </div>
+        {/if}
+        {#if hasCommissionNodes}
+        <div class="p-4 border-b border-[var(--border-color)] space-y-3">
+            <h3 class="text-sm font-medium text-[var(--text-secondary)]">Commission Progress</h3>
+            <div class="space-y-2">
+                {#each [
+                    { name: 'Contract Signed', status: contractNode?.data.status === 'signed' },
+                    { name: 'Payment Received', status: contractNode?.data.paymentStatus === 'paid' },
+                    { name: 'Delivery Accepted', status: contractNode?.data.deliveryStatus === 'accepted' }
+                ] as milestone, i}
+                    <div class="flex items-center gap-2">
+                        <div class={`w-3 h-3 rounded-full ${milestone.status ? 'bg-[var(--brand-green)]' : 'bg-[var(--border-color)]'}`} />
+                        <span class="text-sm">{milestone.name}</span>
+                    </div>
+                {/each}
+            </div>
+        </div>
+        {/if}
         <div class="p-4 border-b border-[var(--border-color)]">
             <div class="flex items-center gap-3">
                 <div class="flex-1">
                     <h2 class="text-lg font-semibold mb-2">{silo?.name || 'Untitled Silo'}</h2>
+                    
                     <div class="flex items-center gap-2">
                         <div class="flex-1 h-2 bg-gray-200 rounded-full">
                             <div class="h-2 rounded-full {getProgressColor(progressPercentage)}" 
@@ -333,7 +382,9 @@
                         </div>
                         <span class="text-sm">{completedTasks.length}/{totalTasks}</span>
                     </div>
+                    
                 </div>
+                
                 <select bind:value={selectedFilter} class="text-sm p-2 rounded bg-[var(--bg-secondary)]">
                     <option>Priority</option>
                     <option>Due Date</option>
@@ -343,6 +394,7 @@
         </div>
 
         <!-- Structured Tasks Table -->
+        {#if taskNodes.length > 0}
         <div class="flex-1 overflow-y-auto p-4">
             <h3 class="text-sm font-medium text-[var(--text-secondary)] mb-3">Structured Tasks</h3>
             <table class="w-full text-sm">
@@ -385,6 +437,11 @@
                 </tbody>
             </table>
         </div>
+        {:else if !hasCommissionNodes}
+        <div class="flex-1 flex items-center justify-center p-4">
+            <p class="text-[var(--text-secondary)] text-center">No tasks or commissions found<br/>Create nodes in the Flow Editor</p>
+        </div>
+        {/if}
     </div>
 
     <!-- Main Content Area -->
@@ -396,6 +453,25 @@
                 Reset View
             </button>
         </div>
+         {#if hasCommissionNodes}
+    <div class="p-4 border-b border-[var(--border-color)] space-y-4">
+        <h2 class="text-lg font-semibold">Commission Details</h2>
+        {#if clientNode}
+        <div>
+            <h3 class="text-sm font-medium text-[var(--text-secondary)] mb-2">Client Information</h3>
+            <p class="text-sm">{clientNode.data.company}</p>
+            <p class="text-xs text-[var(--text-secondary)]">Contacts: {clientNode.data.contacts?.join(', ')}</p>
+        </div>
+        {/if}
+
+        {#if contractNode}
+        <div>
+            <h3 class="text-sm font-medium text-[var(--text-secondary)] mb-2">Contract Terms</h3>
+            <div class="text-sm prose max-w-none"></div>
+        </div>
+        {/if}
+    </div>
+    {/if}
 
         <!-- Mobile Task List -->
         <div class="md:hidden flex-1 overflow-y-auto p-4">
@@ -431,6 +507,7 @@
         <!-- Desktop Node Canvas -->
         <div class="hidden md:block flex-1 overflow-y-auto p-6">
             <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-7xl mx-auto">
+                {#if taskNodes.length > 0 || resourceNodes.length > 0}
                 {#each filteredTasks as node}
                 <a 
                   href={`/silos/${siloId}/workspace/${node.id}`}
@@ -460,7 +537,27 @@
                   </div>
                 </a>
                 {/each}
-
+                {/if}
+                {#each commissionNodes as node}
+                <div class="bg-[var(--bg-secondary)] rounded-xl p-4 border border-[var(--border-color)] hover:border-[var(--brand-green)] transition-colors">
+                    <h3 class="text-sm font-medium text-[var(--text-primary)] mb-2">
+                        {node.type.charAt(0).toUpperCase() + node.type.slice(1)} Node
+                    </h3>
+                    <p class="text-sm text-[var(--text-secondary)] truncate">{safeNodeTitle(node)}</p>
+                    {#if node.type === 'contract'}
+                    <div class="mt-3 space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-[var(--text-secondary)]">Status:</span>
+                            <span class="text-xs text-[var(--brand-green)]">{node.data.status}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-[var(--text-secondary)]">Payment:</span>
+                            <span class="text-xs text-[var(--text-secondary)]">{node.data.paymentStatus || 'Pending'}</span>
+                        </div>
+                    </div>
+                    {/if}
+                </div>
+                {/each}
                 {#each resourceNodes as node}
                 <div class="bg-[var(--bg-secondary)] rounded-xl p-4 border border-[var(--border-color)] hover:border-[var(--brand-green)] transition-colors">
                     <h3 class="text-sm font-medium text-[var(--text-primary)] mb-2">Resource Node</h3>
