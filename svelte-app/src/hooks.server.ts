@@ -3,12 +3,9 @@ import { createServerClient } from '@supabase/ssr'
 import type { Handle } from '@sveltejs/kit'
 import { supabase } from '$lib/supabaseClient';
 
-export const handle = async ({ event, resolve }) => {
-  event.locals.getSession = async () => {
-    const { data: { session } } = await event.locals.supabase.auth.getSession();
-    return session;
-  };
-    event.locals.supabase = createServerClient(
+export const handle: Handle = async ({ event, resolve }) => {
+  // Initialize Supabase
+  event.locals.supabase = createServerClient(
     import.meta.env.VITE_SUPABASE_URL,
     import.meta.env.VITE_SUPABASE_KEY,
     {
@@ -23,10 +20,18 @@ export const handle = async ({ event, resolve }) => {
       }
     }
   )
-  console.log('Session in hooks:', (await event.locals.supabase.auth.getSession()).data.session)
-  event.locals.session = (await event.locals.supabase.auth.getSession()).data.session
 
-  return resolve(event)
+  const { data: { session } } = await event.locals.supabase.auth.getSession()
+  event.locals.session = session
+
+  // Resolve with proper headers
+  const response = await resolve(event, {
+    filterSerializedResponseHeaders(name) {
+      return name === 'content-range' || name === 'x-supabase-api-version'
+    }
+  })
+
+  return response
 }
 
 

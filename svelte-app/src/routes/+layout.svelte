@@ -11,24 +11,47 @@
   import { user } from '$lib/stores/userStore';
   import { tweened } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
+  import { invalidateAll } from '$app/navigation';
+  import { page } from '$app/stores';
+  
 
   // Animation for main content margin
   const mainMargin = tweened(80, { duration: 300, easing: cubicOut });
 
-  // Update margin when sidebar collapsed state changes
-  $effect(() => {
-  mainMargin.set($sidebarCollapsed ? 80 : 256);
-});
+ // Update margin when sidebar collapsed state changes
+ $effect(() => {
+    mainMargin.set($sidebarCollapsed ? 80 : 256);
+  });
 
   if (browser) {
     onMount(() => {
+      // Existing theme logic
       const savedTheme = localStorage.getItem('theme') || 'dark';
       theme.set(savedTheme);
-
-      return theme.subscribe(t => {
+      const themeUnsubscribe = theme.subscribe(t => {
         document.documentElement.setAttribute('data-theme', t);
         localStorage.setItem('theme', t);
       });
+
+      // New 404 handling logic
+      const handle404 = () => {
+        if (document.body.textContent?.includes('404')) {
+          invalidateAll();
+        }
+      };
+      
+      // Check immediately on mount
+      handle404();
+      
+      // Set up observer for future changes
+      const observer = new MutationObserver(handle404);
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      // Cleanup both subscriptions
+      return () => {
+        themeUnsubscribe();
+        observer.disconnect();
+      };
     });
   }
 

@@ -6,7 +6,9 @@ const config = {
   preprocess: vitePreprocess(),
   kit: {
     adapter: adapter({
-      fallback: 'index.html'
+      fallback: 'index.html',
+      precompress: false, // Disable if not needed
+      strict: true  
     }),
     csp: {
       directives: {
