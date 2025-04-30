@@ -10,6 +10,7 @@
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabaseClient'; // Import your Supabase client
   import { user } from '$lib/stores/userStore';
+  import { onMount } from 'svelte';
 
   // State variables
   let showLibrary = false;
@@ -31,6 +32,77 @@
     newSiloName = silo.name;
     taskEditorText = silo.nodes.map(node => node.data.title).join('\n');
   }
+
+  onMount(async () => {
+  if ($user) {
+    // Load user-specific silos on mount
+    try {
+      isLoading = true;
+      const { data, error } = await supabase
+        .from('silos')
+        .select('*')
+        .eq('user_id', $user.id);
+        
+      if (error) throw error;
+      
+      // Update the store with user's silos
+      siloStore.set(data.map(silo => ({
+        ...silo,
+        nodes: [],
+        edges: [],
+        isLoading: false
+      })));
+      
+      // Then load nodes and edges for each silo
+      for (const silo of data) {
+        loadSiloContent(silo.id);
+      }
+    } catch (err) {
+      processingError = err instanceof Error ? err.message : "Failed to load silos";
+    } finally {
+      isLoading = false;
+    }
+  }
+});
+
+// Function to load nodes and edges for a silo
+async function loadSiloContent(siloId: string) {
+  if (!$user) return;
+  
+  try {
+    // Load nodes
+    const { data: nodes, error: nodesError } = await supabase
+      .from('nodes')
+      .select('*')
+      .eq('silo_id', siloId)
+      .eq('user_id', $user.id);
+      
+    if (nodesError) throw nodesError;
+    
+    // Load edges
+    const { data: edges, error: edgesError } = await supabase
+      .from('edges')
+      .select('*')
+      .eq('silo_id', siloId)
+      .eq('user_id', $user.id);
+      
+    if (edgesError) throw edgesError;
+    
+    // Update the store with the loaded data
+    siloStore.update(store => 
+      store.map(silo => {
+        if (silo.id !== siloId) return silo;
+        return {
+          ...silo,
+          nodes: nodes || [],
+          edges: edges || []
+        };
+      })
+    );
+  } catch (err) {
+    console.error(`Failed to load content for silo ${siloId}:`, err);
+  }
+}
 
   // Create a new silo
   async function createNewSilo() {
@@ -60,13 +132,60 @@
       processingError = err instanceof Error ? err.message : "Silo creation failed";
     }
   }
+  async function handleRename(siloId: string, newName: string) {
+  if (!$user) {
+    processingError = "You must be logged in to rename a silo";
+    return false;
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('silos')
+      .update({ name: newName })
+      .eq('id', siloId)
+      .eq('user_id', $user.id);
+      
+    if (error) throw error;
+    
+    // Update local store
+    renameSilo(siloId, newName);
+    return true;
+  } catch (err) {
+    processingError = err instanceof Error ? err.message : "Failed to rename silo";
+    return false;
+  }
+}
 
   // Delete a silo
-  function handleDelete(siloId: string, e: MouseEvent) {
-    e.preventDefault();
+  async function handleDelete(siloId: string, e: MouseEvent) {
+  e.preventDefault();
+  
+  if (!$user) {
+    processingError = "You must be logged in to delete a silo";
+    return;
+  }
+  
+  try {
+    isLoading = true;
+    
+    // Delete the silo from database
+    const { error } = await supabase
+      .from('silos')
+      .delete()
+      .eq('id', siloId)
+      .eq('user_id', $user.id);
+      
+    if (error) throw error;
+    
+    // Remove from local store
     deleteSilo(siloId);
     goto('/silos');
+  } catch (err) {
+    processingError = err instanceof Error ? err.message : "Failed to delete silo";
+  } finally {
+    isLoading = false;
   }
+}
 
 
 </script>
@@ -124,14 +243,14 @@
           </a>
           
           {#if renamingSilo}
-            <input
-              bind:value={newSiloName}
-              on:keydown={(e) => e.key === 'Enter' && renameSilo(silo.id, newSiloName) && (renamingSilo = false)}
-              class="rename-input"
-            />
-            <button on:click={() => { renameSilo(silo.id, newSiloName); renamingSilo = false; }} class="toolbar-button">
-              Save
-            </button>
+          <input
+            bind:value={newSiloName}
+            on:keydown={(e) => e.key === 'Enter' && handleRename(silo.id, newSiloName) && (renamingSilo = false)}
+            class="rename-input"
+          />
+          <button on:click={() => { handleRename(silo.id, newSiloName).then(success => { if (success) renamingSilo = false; }); }} class="toolbar-button">
+            Save
+          </button>
           {:else}
             <h2>{silo.name}</h2>
             <button on:click={() => renamingSilo = true} class="toolbar-button">

@@ -5,6 +5,9 @@ import { validateNodeConnections } from '$lib/utils/nodeUtils';
 import { NODE_TYPES } from '$lib/types/nodes';
 import { nodeUtils } from '$lib/utils/nodeUtils';
 import { goto } from '$app/navigation';
+import { supabase } from '$lib/supabaseClient';
+import { user } from '$lib/stores/userStore';
+
 
 
 export type Position = { x: number; y: number };
@@ -281,82 +284,137 @@ export function getNodePosition(siloId: string, nodeId: string): Position | unde
 }
 
 // Add a node to a silo
-export function addNode(siloId: string, type: NodeType, position: Position): SiloNode {
-  const newNode = createNode(type, siloId, position);
+export async function addNode(siloId: string, nodeType: NodeType, position: Position, initialData: any = {}) {
+  const currentUser = get(user);
+  if (!currentUser) return null;
   
-  siloStore.update(store => {
-    const updatedStore = store.map(silo => {
-      if (silo.id !== siloId) return silo;
+  const newNodeId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const nodeData = {
+    title: `New ${nodeType}`,
+    description: '',
+    status: 'not-started',
+    ...initialData
+  };
+  
+  const newNode: SiloNode = {
+    id: newNodeId,
+    type: nodeType,
+    position,
+    data: nodeData,
+    siloId,
+    updated_at: new Date().toISOString(),
+    created_at: new Date().toISOString()
+  };
+  
+  try {
+    // Save to database first
+    const { error } = await supabase
+      .from('nodes')
+      .insert({
+        id: newNodeId,
+        silo_id: siloId,
+        type: nodeType,
+        position,
+        data: nodeData,
+        user_id: currentUser.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
       
-      return {
-        ...silo,
-        nodes: [...silo.nodes, newNode]
-      };
-    });
+    if (error) throw error;
     
-    return updatedStore;
-  });
-  
-  return newNode;
+    // Then update local store
+    siloStore.update(store => 
+      store.map(silo => {
+        if (silo.id !== siloId) return silo;
+        return {
+          ...silo,
+          nodes: [...silo.nodes, newNode]
+        };
+      })
+    );
+    
+    return newNodeId;
+  } catch (err) {
+    console.error('Failed to add node:', err);
+    return null;
+  }
 }
 
 // Update a node's position
-export function updateNodePosition(siloId: string, nodeId: string, position: Position) {
-  siloStore.update(stores => {
-    return stores.map(silo => {
-      if (silo.id !== siloId) return silo;
-      
-      const updatedNodes = silo.nodes.map(node => {
-        if (node.id !== nodeId) return node;
+export async function updateNodePosition(siloId: string, nodeId: string, position: Position) {
+  try {
+    // Update local store first for responsiveness
+    siloStore.update(stores => {
+      return stores.map(silo => {
+        if (silo.id !== siloId) return silo;
+        
+        const updatedNodes = silo.nodes.map(node => {
+          if (node.id !== nodeId) return node;
+          
+          return {
+            ...node,
+            position,
+            updated_at: new Date().toISOString()
+          };
+        });
+        
+        // Update all connections involving this node
+        const updatedEdges = silo.edges.map(edge => {
+          if (edge.source !== nodeId && edge.target !== nodeId) return edge;
+          
+          const sourceNode = edge.source === nodeId 
+            ? { ...silo.nodes.find(n => n.id === nodeId), position } 
+            : silo.nodes.find(n => n.id === edge.source);
+          
+          const targetNode = edge.target === nodeId 
+            ? { ...silo.nodes.find(n => n.id === nodeId), position } 
+            : silo.nodes.find(n => n.id === edge.target);
+          
+          if (!sourceNode || !targetNode) return edge;
+          
+          const pathData = calculateConnectionPath(
+            sourceNode as SiloNode,
+            targetNode as SiloNode,
+            edge.sourceHandle,
+            edge.targetHandle
+          );
+          
+          return {
+            ...edge,
+            pathType: 'bezier' as const,
+            pathData,
+            updated_at: new Date().toISOString()
+          };
+        });
         
         return {
-          ...node,
-          position: {
-            x: position.x,
-            y: position.y
-          }
+          ...silo,
+          nodes: updatedNodes,
+          edges: updatedEdges
         };
       });
-      
-      // Update all connections involving this node
-      const updatedEdges = silo.edges.map(edge => {
-        if (edge.source !== nodeId && edge.target !== nodeId) return edge;
-        
-        const sourceNode = edge.source === nodeId 
-          ? { ...silo.nodes.find(n => n.id === nodeId), position } 
-          : silo.nodes.find(n => n.id === edge.source);
-        
-        const targetNode = edge.target === nodeId 
-          ? { ...silo.nodes.find(n => n.id === nodeId), position } 
-          : silo.nodes.find(n => n.id === edge.target);
-        
-        if (!sourceNode || !targetNode) return edge;
-        
-        const pathData = calculateConnectionPath(
-          sourceNode as SiloNode,
-          targetNode as SiloNode,
-          edge.sourceHandle,
-          edge.targetHandle
-        );
-        
-        // Use the 'as const' assertion to ensure type safety
-        return {
-          ...edge,
-          pathType: 'bezier' as const,
-          pathData
-        };
-      });
-      
-      return {
-        ...silo,
-        nodes: updatedNodes,
-        edges: updatedEdges
-      };
     });
-  });
-  
-  // Validate connections after position update
-  validateSiloNodes(siloId);
+    
+    // Then sync with database
+    const { error } = await supabase
+      .from('nodes')
+      .update({ 
+        position, 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', nodeId);
+      
+    if (error) throw error;
+    
+    // Validate connections after position update
+    validateSiloNodes(siloId);
+    
+    return true;
+  } catch (err) {
+    console.error('Failed to update node position:', err);
+    return false;
+  }
 }
 
 export function addComment(siloId: string, nodeId: string, comment: string) {
@@ -440,36 +498,98 @@ if (browser) {
 }
 
 // Delete a silo
-export function deleteSilo(siloId: string) {
-  siloStore.update(store => store.filter(s => s.id !== siloId));
+export async function deleteSilo(siloId: string) {
+  const currentUser = get(user);
+  if (!currentUser) return false;
+  
+  try {
+    // First delete from database
+    const { error } = await supabase
+      .from('silos')
+      .delete()
+      .eq('id', siloId)
+      .eq('user_id', currentUser.id);
+      
+    if (error) throw error;
+    
+    // Then update local store
+    siloStore.update(store => store.filter(s => s.id !== siloId));
+    return true;
+  } catch (err) {
+    console.error('Failed to delete silo:', err);
+    return false;
+  }
 }
 
 // Rename a silo
-export function renameSilo(siloId: string, newName: string) {
-  siloStore.update(store => 
-    store.map(s => s.id === siloId ? {...s, name: newName} : s)
-  );
+export async function renameSilo(siloId: string, newName: string) {
+  const currentUser = get(user);
+  if (!currentUser) return false;
+  
+  try {
+    // First update in database
+    const { error } = await supabase
+      .from('silos')
+      .update({ name: newName })
+      .eq('id', siloId)
+      .eq('user_id', currentUser.id);
+      
+    if (error) throw error;
+    
+    // Then update local store
+    siloStore.update(store => 
+      store.map(s => s.id === siloId ? {...s, name: newName} : s)
+    );
+    
+    return true;
+  } catch (err) {
+    console.error('Failed to rename silo:', err);
+    return false;
+  }
 }
 
 // Delete a node
-export function deleteNode(siloId: string, nodeId: string) {
-  siloStore.update(store => 
-    store.map(silo => {
-      if (silo.id !== siloId) return silo;
+export async function deleteNode(siloId: string, nodeId: string) {
+  try {
+    // Get all edges connected to this node to delete them first
+    const silo = get(siloStore).find(s => s.id === siloId);
+    if (!silo) throw new Error('Silo not found');
+    
+    const connectedEdges = silo.edges.filter(
+      edge => edge.source === nodeId || edge.target === nodeId
+    );
+    
+    // First delete all connected edges from database
+    for (const edge of connectedEdges) {
+      await removeConnection(siloId, edge.id);
+    }
+    
+    // Then delete the node from database
+    const { error } = await supabase
+      .from('nodes')
+      .delete()
+      .eq('id', nodeId);
       
-      return {
-        ...silo,
-        nodes: silo.nodes.filter(n => n.id !== nodeId),
-        edges: silo.edges.filter(e => 
-          e.source !== nodeId && e.target !== nodeId
-        )
-      };
-    })
-  );
-  
-  // Validate remaining nodes
-  validateSiloNodes(siloId);
+    if (error) throw error;
+    
+    // Then update local store
+    siloStore.update(stores => {
+      return stores.map(silo => {
+        if (silo.id !== siloId) return silo;
+        return {
+          ...silo,
+          nodes: silo.nodes.filter(node => node.id !== nodeId)
+        };
+      });
+    });
+    
+    return true;
+  } catch (err) {
+    console.error('Failed to delete node:', err);
+    return false;
+  }
 }
+
 export function triggerNodeFlow(siloId: string, nodeId: string) {
   siloStore.update(store => {
     return store.map(silo => {
@@ -1291,87 +1411,79 @@ function generateOutputContent(inputs: any[]): string {
 }
 
 // Create a connection between nodes
-export function createConnection(siloId: string, sourceId: string, targetId: string) {
-  const silo = get(siloStore).find(s => s.id === siloId);
-  const sourceNode = silo?.nodes.find(n => n.id === sourceId);
-  const targetNode = silo?.nodes.find(n => n.id === targetId);
+export async function createConnection(siloId: string, source: string, target: string, sourceHandle?: string, targetHandle?: string) {
+  const currentUser = get(user);
+  if (!currentUser) return null;
   
-  if (!sourceNode || !targetNode || !validateConnection(sourceNode, targetNode)) {
-    console.log("Invalid connection blocked");
-    return;
-  }
+  const edgeId = `edge_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
   
-  if (sourceId === targetId) {
-    console.error(`Self-connection blocked: ${sourceId}`);
-    return;
-  }
-  
-  siloStore.update(store => {
-    const silo = store.find(s => s.id === siloId);
-    if (!silo) {
-      console.error(`Silo ${siloId} not found`);
-      return store;
-    }
+  try {
+    // Find source and target nodes
+    const silo = get(siloStore).find(s => s.id === siloId);
+    if (!silo) throw new Error('Silo not found');
     
-    // Prevent duplicate connections
-    const exists = silo.edges.some(e => 
-      e.source === sourceId && e.target === targetId
+    const sourceNode = silo.nodes.find(n => n.id === source);
+    const targetNode = silo.nodes.find(n => n.id === target);
+    
+    if (!sourceNode || !targetNode) throw new Error('Source or target node not found');
+    
+    // Calculate path data
+    const pathData = calculateConnectionPath(
+      sourceNode,
+      targetNode,
+      sourceHandle,
+      targetHandle
     );
     
-    if (exists) {
-      console.log(`Connection from ${sourceId} to ${targetId} already exists`);
-      return store;
-    }
-
-    // Get actual node positions from the store
-    const sourceNode = silo.nodes.find(n => n.id === sourceId);
-    const targetNode = silo.nodes.find(n => n.id === targetId);
-    
-    if (!sourceNode || !targetNode) {
-      console.error(`Source node ${sourceId} or target node ${targetId} not found`);
-      return store;
-    }
-
-    // Get port positions (use default if not set)
-    const sourcePortPos = sourceNode.portPositions?.output || { x: sourceNode.width || 150, y: 30 };
-    const targetPortPos = targetNode.portPositions?.input || { x: 0, y: 30 };
-    
-    const sourceX = sourceNode.position.x + sourcePortPos.x;
-    const sourceY = sourceNode.position.y + sourcePortPos.y;
-    const targetX = targetNode.position.x + targetPortPos.x;
-    const targetY = targetNode.position.y + targetPortPos.y;
-    
-    // Calculate control points for bezier curve
-    const deltaX = targetX - sourceX;
-    const offset = Math.min(Math.abs(deltaX) * 0.5, 150);
-    
-    const newEdge = {
-      id: `${sourceId}-${targetId}-${Date.now()}`,
-      source: sourceId,
-      target: targetId,
+    // Create the edge object
+    const newEdge: SiloEdge = {
+      id: edgeId,
+      source,
+      target,
+      sourceHandle,
+      targetHandle,
       siloId,
-      pathData: {
-        sourceX,
-        sourceY,
-        targetX,
-        targetY,
-        controlPoint1X: sourceX + (deltaX > 0 ? offset : -offset),
-        controlPoint1Y: sourceY,
-        controlPoint2X: targetX - (deltaX > 0 ? offset : -offset),
-        controlPoint2Y: targetY
-      },
-      pathType: 'bezier' as const
+      animated: false,
+      pathType: 'bezier',
+      pathData
     };
-
-    // Update the silo with the new edge
-    return store.map(s => {
-      if (s.id !== siloId) return s;
-      return {
-        ...s,
-        edges: [...s.edges, newEdge]
-      };
+    
+    // Save to database first
+    const { error } = await supabase
+      .from('edges')
+      .insert({
+        id: edgeId,
+        source,
+        target,
+        source_handle: sourceHandle,
+        target_handle: targetHandle,
+        silo_id: siloId,
+        animated: false,
+        path_type: 'bezier',
+        path_data: pathData,
+        user_id: currentUser.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      
+    if (error) throw error;
+    
+    // Then update local store
+    siloStore.update(stores => {
+      return stores.map(silo => {
+        if (silo.id !== siloId) return silo;
+        return {
+          ...silo,
+          edges: [...silo.edges, newEdge]
+        };
+      });
     });
-  });
+    
+    return edgeId;
+  } catch (err) {
+    console.error('Failed to create connection:', err);
+    return null;
+  }
 }
 
 export function createTemporaryConnection(
@@ -1499,20 +1611,32 @@ export function updateAllConnectionPaths(siloId: string) {
   });
 }
 // Remove a connection
-export function removeConnection(siloId: string, edgeId: string) {
-  siloStore.update(store => 
-    store.map(silo => {
-      if (silo.id !== siloId) return silo;
+export async function removeConnection(siloId: string, edgeId: string) {
+  try {
+    // Remove from database first
+    const { error } = await supabase
+      .from('edges')
+      .delete()
+      .eq('id', edgeId);
       
-      return {
-        ...silo,
-        edges: silo.edges.filter(e => e.id !== edgeId)
-      };
-    })
-  );
-  
-  // Validate nodes after removing connection
-  validateSiloNodes(siloId);
+    if (error) throw error;
+    
+    // Then update local store
+    siloStore.update(stores => {
+      return stores.map(silo => {
+        if (silo.id !== siloId) return silo;
+        return {
+          ...silo,
+          edges: silo.edges.filter(edge => edge.id !== edgeId)
+        };
+      });
+    });
+    
+    return true;
+  } catch (err) {
+    console.error('Failed to remove connection:', err);
+    return false;
+  }
 }
 
 // Update port positions for a node
