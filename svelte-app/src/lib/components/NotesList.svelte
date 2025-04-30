@@ -1,27 +1,43 @@
-
 <svelte:window on:keydown={handleKeydown} />
 <script lang="ts">
     import { noteStore } from '$lib/stores/noteStore';
     import { fade } from 'svelte/transition';
     import { user } from '$lib/stores/userStore';
     import { goto } from '$app/navigation';
-    let searchQuery = '';
+    import { onMount } from 'svelte';
     
+    let searchQuery = '';
     let notes: Note[] = [];
     let isLoading = false;
     let currentPage = 1;
+    let isAuthenticated = false;
+    let showAuthWarning = false;
     const itemsPerPage = 20;
     let activeSettingsNote: string | null = null;
     
+    onMount(() => {
+      const unsubscribe = user.subscribe(value => {
+        isAuthenticated = !!value?.id;
+        // Only show warning once
+        if (!isAuthenticated && !showAuthWarning) {
+          showAuthWarning = true;
+        }
+        loadNotes();
+      });
+      
+      return () => {
+        unsubscribe();
+      };
+    });
     
     function handleKeydown(e: KeyboardEvent) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault();
-      document.querySelector('input')?.focus();
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        document.querySelector('input')?.focus();
+      }
     }
-  }
 
-  interface Note {
+    interface Note {
         id: string;
         title: string;
         content?: string;
@@ -42,20 +58,22 @@
         }
       } catch (err) {
         console.error('Load failed:', err);
+      } finally {
+        isLoading = false;
       }
-      isLoading = false;
     }
 
     async function handleNoteClick(note: Note) {
-    if (note.id) {
-      await goto(`/notes/${note.id}`);
-    } else {
-      // Handle new notes that haven't been saved yet
-      const newNote = await noteStore.saveNote(note);
-      await goto(`/notes/${newNote.id}`);
+      if (note.id) {
+        await goto(`/notes/${note.id}`);
+      } else {
+        // Handle new notes that haven't been saved yet
+        const newNote = await noteStore.saveNote(note);
+        await goto(`/notes/${newNote.id}`);
+      }
     }
-  }
-  function toggleSettings(noteId: string, event: MouseEvent) {
+    
+    function toggleSettings(noteId: string, event: MouseEvent) {
         event.stopPropagation();
         activeSettingsNote = activeSettingsNote === noteId ? null : noteId;
     }
@@ -97,13 +115,47 @@
             closeSettings();
         }
     }
+    
+    function dismissWarning() {
+      showAuthWarning = false;
+    }
   
     $: if (searchQuery || currentPage) loadNotes();
-  </script>
+</script>
 
 <svelte:body on:click={handleClickOutside} />
 
 <div class="flex flex-col space-y-4">
+  <!-- Authentication Warning -->
+  {#if showAuthWarning && !isAuthenticated}
+    <div class="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4 rounded-md" transition:fade={{ duration: 150 }}>
+      <div class="flex items-start">
+        <div class="flex-shrink-0">
+          <svg class="h-5 w-5 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+        </div>
+        <div class="ml-3">
+          <p class="text-sm text-amber-700">
+            You are not logged in. You can view and create notes, but they will not be saved permanently without logging in.
+          </p>
+        </div>
+        <div class="ml-auto pl-3">
+          <div class="-mx-1.5 -my-1.5">
+            <button 
+              on:click={dismissWarning}
+              class="inline-flex rounded-md p-1.5 text-amber-500 hover:bg-amber-100 focus:outline-none"
+            >
+              <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Search Bar -->
   <div class="relative">
       <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
@@ -123,6 +175,19 @@
   {#if isLoading}
       <div class="flex justify-center py-12">
           <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[var(--brand-green)]"></div>
+      </div>
+  {:else if !isAuthenticated && !notes.length}
+      <div class="bg-[var(--bg-secondary)] rounded-lg p-8 text-center border border-[var(--border-color)]">
+          <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+          </svg>
+          <h3 class="text-lg font-medium text-[var(--text-primary)]">Please log in to see your notes</h3>
+          <p class="mt-2 text-gray-500 dark:text-gray-400">
+            You can create notes without logging in, but they won't be saved for later.
+          </p>
+          <a href="/login" class="mt-4 inline-block px-4 py-2 bg-[var(--brand-green)] text-white rounded-md hover:bg-opacity-90">
+            Log in now
+          </a>
       </div>
   {:else if notes.length === 0}
       <div class="bg-[var(--bg-secondary)] rounded-lg p-8 text-center border border-[var(--border-color)]">
