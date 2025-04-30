@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import { parseTaskInput } from '$lib/utils/taskParser';
   import { fade } from 'svelte/transition';
+  import { supabase } from '$lib/supabaseClient';
     
   type StatusKey = 'not-started' | 'in-progress' | 'completed';
   type PriorityKey = 'high' | 'medium' | 'low';
@@ -24,6 +25,7 @@
   let showHelp = false;
   let tableVisible = false;
   let columnSelectorOpen = false;
+  let user = null;
 
   // Available columns with default visibility
   let availableColumns = [
@@ -45,6 +47,12 @@
       'in-progress': `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`,
       'completed': `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`
   };
+
+  onMount(async () => {
+    // Check auth state
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  });
 
   function addTask(e: KeyboardEvent) {
       if (e.key === 'Enter') {
@@ -74,8 +82,25 @@
       if (tasks.length === 0) tableVisible = false;
   }
 
-  function runDump() {
-      dispatch('process', { tasks });
+  async function runDump() {
+    if (!user) {
+      // Handle the case where user is not logged in
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+      
+      if (!user) {
+        alert('You must be logged in to save tasks');
+        return;
+      }
+    }
+    
+    if (tasks.length === 0) {
+      alert('Please add at least one task before saving');
+      return;
+    }
+    
+    // Dispatch event with tasks for parent component to handle
+    dispatch('process', { tasks });
   }
 
   function clearTable() {

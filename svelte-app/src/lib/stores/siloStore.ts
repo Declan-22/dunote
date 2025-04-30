@@ -155,17 +155,217 @@ const initialSilos = browser
 
 export const siloDataStore = writable<Silo[]>(initialSilos);
 
+export async function createAndPersistSilo(siloName: string, nodes: SiloNode[] = [], edges: SiloEdge[] = []) {
+  const currentUser = get(user);
+  if (!currentUser) {
+    console.error('Cannot create silo: No user is logged in');
+    return null;
+  }
+  
+  const siloId = crypto.randomUUID();
+  const timestamp = new Date().toISOString();
+  
+  try {
+    // First create the silo in Supabase
+    const { error: siloError } = await supabase
+      .from('silos')
+      .insert({
+        id: siloId,
+        name: siloName,
+        user_id: currentUser.id,
+        created_at: timestamp,
+        updated_at: timestamp
+      });
+      
+    if (siloError) throw siloError;
+    
+    // Then insert all nodes if there are any
+    if (nodes.length > 0) {
+      const nodeInserts = nodes.map(node => ({
+        id: node.id,
+        silo_id: siloId, 
+        type: node.type,
+        position: node.position,
+        data: node.data,
+        user_id: currentUser.id,
+        created_at: node.created_at || timestamp,
+        updated_at: node.updated_at || timestamp
+      }));
+      
+      const { error: nodesError } = await supabase
+        .from('nodes')
+        .insert(nodeInserts);
+        
+      if (nodesError) throw nodesError;
+    }
+    
+    // Finally insert all edges if there are any
+    if (edges.length > 0) {
+      const edgeInserts = edges.map(edge => ({
+        id: edge.id,
+        silo_id: siloId,
+        source: edge.source,
+        target: edge.target,
+        source_handle: edge.sourceHandle,
+        target_handle: edge.targetHandle,
+        path_type: edge.pathType || 'bezier',
+        path_data: edge.pathData,
+        user_id: currentUser.id,
+        created_at: timestamp,
+        updated_at: timestamp
+      }));
+      
+      const { error: edgesError } = await supabase
+        .from('edges')
+        .insert(edgeInserts);
+        
+      if (edgesError) throw edgesError;
+    }
+    
+    // Update the local store only after successful database operations
+    const newSilo: Silo = {
+      id: siloId,
+      name: siloName,
+      nodes,
+      edges,
+      isLoading: false
+    };
+    
+    siloStore.update(store => [...store, newSilo]);
+    
+    return siloId;
+  } catch (err) {
+    console.error('Failed to create and persist silo:', err);
+    return null;
+  }
+}
+
+// Load all silos from Supabase for the current user
+export async function loadSilosFromDatabase() {
+  const currentUser = get(user);
+  if (!currentUser) return false;
+  
+  try {
+    // First get all silos for this user
+    const { data: silos, error: silosError } = await supabase
+      .from('silos')
+      .select('*')
+      .eq('user_id', currentUser.id);
+      
+    if (silosError) throw silosError;
+    
+    const fullSilos: Silo[] = [];
+    
+    // For each silo, get its nodes and edges
+    for (const silo of silos) {
+      // Get nodes
+      const { data: nodes, error: nodesError } = await supabase
+        .from('nodes')
+        .select('*')
+        .eq('silo_id', silo.id);
+        
+      if (nodesError) throw nodesError;
+      
+      // Get edges
+      const { data: edges, error: edgesError } = await supabase
+        .from('edges')
+        .select('*')
+        .eq('silo_id', silo.id);
+        
+      if (edgesError) throw edgesError;
+      
+      // Convert database formats to app formats
+      const formattedNodes: SiloNode[] = nodes.map(node => ({
+        id: node.id,
+        type: node.type,
+        position: node.position,
+        data: node.data,
+        siloId: silo.id,
+        portPositions: node.port_positions || {
+          input: { x: 0, y: 30 },
+          output: { x: 150, y: 30 }
+        },
+        updated_at: node.updated_at,
+        created_at: node.created_at
+      }));
+      
+      const formattedEdges: SiloEdge[] = edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        sourceHandle: edge.source_handle,
+        target: edge.target,
+        targetHandle: edge.target_handle,
+        siloId: silo.id,
+        pathType: edge.path_type || 'bezier',
+        pathData: edge.path_data
+      }));
+      
+      fullSilos.push({
+        id: silo.id,
+        name: silo.name,
+        nodes: formattedNodes,
+        edges: formattedEdges,
+        isLoading: false
+      });
+    }
+    
+    // Update the store with database data
+    siloStore.set(fullSilos);
+    return true;
+  } catch (err) {
+    console.error('Failed to load silos from database:', err);
+    return false;
+  }
+}
+
+// Sync local silos to Supabase (useful for initial load or reconnection)
+export async function syncSilosToDatabase() {
+  const currentUser = get(user);
+  if (!currentUser) return false;
+  
+  try {
+    const localSilos = get(siloStore);
+    
+    // For each local silo, check if it exists in the database
+    for (const silo of localSilos) {
+      const { data: existingSilo, error } = await supabase
+        .from('silos')
+        .select('id')
+        .eq('id', silo.id)
+        .maybeSingle();
+        
+      if (error) throw error;
+      
+      // If silo doesn't exist in DB, create it along with its nodes and edges
+      if (!existingSilo) {
+        await createAndPersistSilo(silo.name, silo.nodes, silo.edges);
+      }
+    }
+    
+    return true;
+  } catch (err) {
+    console.error('Failed to sync silos to database:', err);
+    return false;
+  }
+}
+
 // Initialize with a default silo if none exists
 export function initializeSilos() {
   const storedSilos = get(siloStore);
   if (storedSilos.length === 0) {
     const defaultSilo = createDefaultSilo();
     siloStore.set([defaultSilo]);
+    
+    // Also save the default silo to Supabase if user is logged in
+    createAndPersistSilo(defaultSilo.name, defaultSilo.nodes, defaultSilo.edges)
+      .catch(err => console.error('Failed to persist default silo:', err));
   }
 }
 
 function createDefaultSilo(): Silo {
   const siloId = crypto.randomUUID();
+  const timestamp = new Date().toISOString();
+  
   return {
     id: siloId,
     name: 'My Project',
@@ -175,8 +375,8 @@ function createDefaultSilo(): Silo {
       position: { x: 400, y: 200 },
       data: { title: 'Main Project', description: 'Manage project workflow' },
       siloId,
-      updated_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
+      updated_at: timestamp,
+      created_at: timestamp,
     }],
     edges: [],
   };
