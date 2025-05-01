@@ -115,39 +115,42 @@
     const editorElement = document.querySelector('#editor');
     if (editorElement) {
       editor = new Editor({
-        element: editorElement,
-        extensions: [
-          StarterKit,
-          Placeholder.configure({ 
-            placeholder: 'Start writing...',
-            showOnlyWhenEditable: true 
-          }),
-          TaskList,
-          TaskItem.configure({
-            nested: true,
-          }),
-          Highlight,
-          Link,
-          Image,
-          Underline,
-          Table,
-          TableRow,
-          TableCell,
-          TableHeader,
-          TextStyle
-        ],
-        content: currentNote.content || '<p></p>',
-        editorProps: {
-          attributes: {
-            class: 'prose prose-lg max-w-none focus:outline-none font-mono p-4',
-            style: 'min-height: 300px; width: 100%; white-space: pre-wrap; word-wrap: break-word;'
-          }
-        },
-        onUpdate: ({ editor }) => {
-          currentNote.content = editor.getHTML();
-          autoSave();
-        }
-      });
+  element: editorElement,
+  extensions: [
+    StarterKit,
+    Placeholder.configure({ 
+      placeholder: 'Start writing...',
+      showOnlyWhenEditable: true 
+    }),
+    TaskList,
+    TaskItem.configure({
+      nested: true,
+    }),
+    Highlight,
+    Link.configure({
+      openOnClick: false,
+    }),
+    Image,
+    Underline,
+    Table.configure({
+      resizable: true,
+    }),
+    TableRow,
+    TableCell,
+    TableHeader,
+    TextStyle
+  ],
+  content: currentNote.content || '<p></p>',
+  editorProps: {
+    attributes: {
+      class: 'prose max-w-none focus:outline-none font-mono p-4 whitespace-normal break-words',
+    }
+  },
+  onUpdate: ({ editor }) => {
+    currentNote.content = editor.getHTML();
+    autoSave();
+  }
+});
       
       // Add editor focus for immediate typing
       editor.commands.focus();
@@ -201,7 +204,6 @@
   
 async function loadNote(id: string) {
   try {
-    // First try to get from the store
     const storeNote = $noteStore.find(n => n.id === id);
     if (storeNote) {
       currentNote = { ...storeNote };
@@ -211,7 +213,6 @@ async function loadNote(id: string) {
       return;
     }
 
-    // Otherwise load from DB
     const { data, error } = await supabase
       .from('notes')
       .select('*, attachedNodes:note_nodes(node:nodes(id, title))')
@@ -220,19 +221,28 @@ async function loadNote(id: string) {
 
     if (error) throw error;
     
-    // Transform the data structure to match our Note interface
     currentNote = {
       ...data,
-      // Flatten the nested structure from Supabase
       attachedNodes: data.attachedNodes?.map((item: any) => item.node) || []
     };
     
-    // Wait for editor to be initialized
-    setTimeout(() => {
-      if (editor) {
-        editor.commands.setContent(currentNote.content || '<p></p>');
-      }
-    }, 150);
+    // Ensure editor has fully initialized before setting content
+    if (editor) {
+      editor.commands.setContent(currentNote.content || '<p></p>');
+    } else {
+      // Set up a proper retry mechanism
+      const maxRetries = 5;
+      let retries = 0;
+      const interval = setInterval(() => {
+        if (editor) {
+          editor.commands.setContent(currentNote.content || '<p></p>');
+          clearInterval(interval);
+        } else if (retries++ >= maxRetries) {
+          clearInterval(interval);
+          console.error('Editor not initialized after maximum retries');
+        }
+      }, 200);
+    }
   } catch (error) {
     console.error('Error loading note:', error);
   }
@@ -247,13 +257,13 @@ function autoSave() {
   // Set new timeout
   savedTimeout = setTimeout(async () => {
     try {
-      // Create a copy of currentNote without attachedNodes for saving
-      const { attachedNodes, ...noteToSave } = { ...currentNote };
-      
-      // Make sure we have content from the editor
-      if (editor) {
-        noteToSave.content = editor.getHTML();
+      // Always get the latest content from editor
+      if (editor && editor.isEditable) {
+        currentNote.content = editor.getHTML();
       }
+      
+      // Make a clean copy without attachedNodes for saving
+      const { attachedNodes, ...noteToSave } = { ...currentNote };
       
       noteToSave.updated_at = new Date().toISOString();
       
@@ -261,7 +271,7 @@ function autoSave() {
         // Create new note
         const { data, error } = await supabase
           .from('notes')
-          .insert([noteToSave])
+          .insert([{ ...noteToSave, user_id: $user?.id }])
           .select()
           .single();
           
@@ -291,7 +301,6 @@ function autoSave() {
       noteStore.update(notes => {
         const index = notes.findIndex(n => n.id === currentNote.id);
         if (index >= 0) {
-          // Copy current note but preserve attachedNodes
           notes[index] = { ...currentNote };
         } else {
           notes.push({ ...currentNote });
@@ -594,7 +603,8 @@ async function detachNode(nodeId: string) {
     {/if}
     
     <!-- TipTap Editor -->
-    <div id="editor" class="bg-transparent border-none font-mono rounded-md focus:outline-none focus:ring-0">
+    <div class="editor-container w-full overflow-hidden">
+    <div id="editor" class="prose prose-lg max-w-none font-mono p-4 whitespace-normal break-words">
       <input 
       type="text" 
       placeholder="Start writing..." 
@@ -603,6 +613,7 @@ async function detachNode(nodeId: string) {
     </div>
   </div>
   </div>
+</div>
   
   <!-- Floating Toolbar -->
   <div 
@@ -1318,6 +1329,53 @@ async function detachNode(nodeId: string) {
     color: var(--text-secondary);
     background-color: var(--bg-secondary);
   }
+
+  .ProseMirror {
+  padding: 1rem;
+  min-height: 300px;
+  outline: none;
+}
+
+.ProseMirror p {
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 2rem;
+  margin-bottom: 1rem;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+  margin-bottom: 1rem;
+  line-height: 1.3;
+}
+:global(#editor) {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+  
+  :global(.ProseMirror) {
+    width: 100%;
+    min-height: 300px;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+  
+  :global(.ProseMirror p) {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+
   
 
 </style>

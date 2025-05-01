@@ -20,12 +20,15 @@
     
   const dispatch = createEventDispatcher();
   export let value = '';
+  export let availableSilos = []; // To hold available silos for integration
   let tasks: Task[] = [];
   let newTask = '';
   let showHelp = false;
   let tableVisible = false;
   let columnSelectorOpen = false;
   let user = null;
+  let integrationMode = false;
+  let selectedSiloId = '';
 
   // Available columns with default visibility
   let availableColumns = [
@@ -49,10 +52,31 @@
   };
 
   onMount(async () => {
-    // Check auth state
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-  });
+  // Check auth state
+  const { data } = await supabase.auth.getUser();
+  user = data.user;
+  
+  // Fetch available silos for integration
+  if (user) {
+    // Make sure we're fetching the right fields
+    // Update this query to match your table structure
+    const { data: silos, error } = await supabase
+      .from('silos')
+      .select('id, name')  // Changed from 'title' to 'name' to match your schema
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+      
+    if (silos && !error) {
+      availableSilos = silos;
+      // If we have silos and integration mode is active, select the first by default
+      if (integrationMode && silos.length > 0) {
+        selectedSiloId = silos[0].id;
+      }
+    } else if (error) {
+      console.error('Error fetching silos:', error);
+    }
+  }
+});
 
   function addTask(e: KeyboardEvent) {
       if (e.key === 'Enter') {
@@ -100,7 +124,14 @@
     }
     
     // Dispatch event with tasks for parent component to handle
-    dispatch('process', { tasks });
+    // Include integration mode and selectedSiloId if in integration mode
+    dispatch('process', { 
+      tasks,
+      integrationMode,
+      siloId: integrationMode ? selectedSiloId : null,
+      // Make sure to include a title property
+      title: 'Task Collection'
+    });
   }
 
   function clearTable() {
@@ -113,12 +144,55 @@
       if (column) column.visible = !column.visible;
       availableColumns = [...availableColumns]; 
   }
+  
+  function toggleIntegrationMode() {
+  integrationMode = !integrationMode;
+  
+  if (integrationMode) {
+    if (availableSilos.length > 0) {
+      selectedSiloId = availableSilos[0].id;
+    } else {
+      // Optionally fetch silos again in case they were created since page load
+      refreshSilos();
+    }
+  }
+}
+
+async function refreshSilos() {
+  if (!user) {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  }
+  
+  if (user) {
+    const { data: silos, error } = await supabase
+      .from('silos')
+      .select('id, name')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+      
+    if (silos && !error) {
+      availableSilos = silos;
+      if (integrationMode && silos.length > 0) {
+        selectedSiloId = silos[0].id;
+      }
+    } else if (error) {
+      console.error('Error refreshing silos:', error);
+    }
+  }
+}
+
 </script>
   
 <div class="task-dump-container">
   <div class="header">
     <h2>Task Dump</h2>
     <div class="header-controls">
+      <button class="icon-button" on:click={toggleIntegrationMode} title="Toggle integration mode">
+        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M7.5 4.75a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m-2.25.75a2.25 2.25 0 1 1 3 2.122v3.906q.13-.096.27-.178c.949-.572 2.165-.739 3.198-.88l.179-.025c1.161-.162 2.102-.322 2.777-.777c.505-.342.937-.91 1.048-2.056a2.25 2.25 0 1 1 1.504.018c-.126 1.577-.738 2.622-1.712 3.28c-1.013.685-2.322.87-3.41 1.02l-.025.004c-1.17.162-2.107.292-2.786.7c-.315.19-.562.436-.737.782c-.18.354-.306.856-.306 1.584v1.378a2.251 2.251 0 1 1-1.5 0V7.622A2.25 2.25 0 0 1 5.25 5.5m11.25-.75a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m-9 13a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5" />
+        </svg>
+    </button>
         <button class="icon-button" on:click={() => columnSelectorOpen = !columnSelectorOpen}>
             <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"/>
@@ -127,7 +201,7 @@
         </button>
         <button class="help-button" on:click={() => showHelp = !showHelp}>?</button>
     </div>
-</div>
+  </div>
 
   {#if columnSelectorOpen}
       <div class="column-selector" transition:fade>
@@ -142,6 +216,22 @@
               </label>
           {/each}
       </div>
+  {/if}
+
+  {#if integrationMode}
+  <div class="integration-selector" transition:fade>
+    <label>
+      Add tasks to existing silo:
+      <select bind:value={selectedSiloId}>
+        {#each availableSilos as silo}
+          <option value={silo.id}>{silo.name}</option> <!-- Changed from silo.title to silo.name -->
+        {/each}
+      </select>
+    </label>
+    {#if availableSilos.length === 0}
+      <p class="empty-silos-message">No silos found. Create a new silo first.</p>
+    {/if}
+  </div>
   {/if}
 
   {#if showHelp}
@@ -232,13 +322,53 @@
 
             <div class="controls">
                 <button class="control-button clear" on:click={clearTable}>Clear All</button>
-                <button class="control-button run" on:click={runDump}>Save</button>
+                <button class="control-button run" on:click={runDump}>
+                  {integrationMode ? 'Add to Silo' : 'Create New Silo'}
+                </button>
             </div>
         </div>
     {/if}
 </div>
+
+
 <style>
   /* Global styles */
+  .integration-selector {
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: var(--background-secondary);
+  }
+
+  .integration-selector select {
+    margin-left: 10px;
+    padding: 4px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+  }
+
+  .empty-silos-message {
+    color: var(--warning);
+    font-size: 0.9em;
+    margin-top: 5px;
+  }
+  
+  .icon-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    margin-right: 8px;
+    border-radius: 4px;
+    color: var(--text-1);
+  }
+  
+  .icon-button:hover {
+    background-color: var(--surface-2);
+  }
 
 
   .header-controls {

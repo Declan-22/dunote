@@ -14,6 +14,18 @@
   let welcomeMessage = '';
 
   let userName = '';
+  
+  interface NodeInsert {
+  id: string;
+  silo_id: string;
+  type: string;
+  position: { x: number; y: number };
+  title: string;
+  data: any;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+}
 
   
   // Welcome message options
@@ -46,55 +58,80 @@
   });
   
 
-  async function handleProcess(event: CustomEvent<{ tasks: any[] }>) {
+
+  async function handleProcess(event: CustomEvent<{ tasks: any[], integrationMode: boolean, siloId: string | null, title: string }>) {
   isLoading = true;
   
   try {
-    const parsedTasks = event.detail.tasks;
+    const { tasks: parsedTasks, integrationMode, siloId: existingSiloId, title: collectionTitle } = event.detail;
     
     if (parsedTasks?.length) {
-      const siloId = crypto.randomUUID();
-      const siloName = parsedTasks[0].name.substring(0, 30);
+      // Get current user FIRST
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error('No user is currently logged in');
 
-      // Create task nodes with port positions
+      // Verify the siloId if in integration mode
+      let siloId = integrationMode && existingSiloId ? existingSiloId : crypto.randomUUID();
+      
+      // Verify that the siloId exists in the database if in integration mode
+      if (integrationMode && existingSiloId) {
+        const { data: existingSilo, error } = await supabase
+          .from('silos')
+          .select('id, name')
+          .eq('id', existingSiloId)
+          .eq('user_id', currentUser.id)
+          .single();
+          
+        if (error || !existingSilo) {
+          console.error('Silo not found or not accessible:', error);
+          throw new Error('The selected silo was not found or you do not have access to it.');
+        }
+      }
+      
+      const siloName = integrationMode && existingSiloId 
+        ? '' // We'll fetch the name from the database for existing silos
+        : (collectionTitle || `Task Collection ${new Date().toLocaleDateString()}`);
+
+      // Create task nodes with port positions (NOW currentUser is available)
       const nodeData = parsedTasks.map((task, index) => ({
-        id: task.id,
+        id: crypto.randomUUID(),
+        silo_id: siloId, // Make sure this is set
         type: 'task',
-        position: { 
+        title: task.name || 'Unnamed Task',
+        position: {
           x: 100 + (index % 3) * 300,
           y: 100 + Math.floor(index / 3) * 150
         },
-        siloId,
         data: {
-          title: task.name,
-          description: '',
-          status: task.status,
-          priority: task.priority,
-          dueDate: task.due_date,
-          resources: task.resources,
-          blockedBy: task.blocked_by
+          description: task.description || '',
+          status: task.status || 'not-started',
+          priority: task.priority || 'medium',
+          dueDate: task.due_date || null,
+          resources: task.resources || [],
+          blockedBy: task.blocked_by || []
         },
         portPositions: {
           input: { x: 0, y: 30 },
           output: { x: 150, y: 30 }
         },
+        user_id: currentUser.id,
         updated_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
       }));
 
       // Process resources and connections
-      const resourceNodes = [];
-      const edges = [];
-      const resourceMap = new Map();
+      const resourceNodes: any[] = [];
+      const edges: any[] = [];
+      const resourceMap = new Map<string, string>();
 
-      parsedTasks.forEach(task => {
+      parsedTasks.forEach((task, index) => {
         const resources = task.resources 
           ? Array.isArray(task.resources) 
             ? task.resources 
             : [task.resources]
           : [];
 
-        resources.forEach(resourceName => {
+        resources.forEach((resourceName: string) => {
           if (!resourceMap.has(resourceName)) {
             const resourceId = crypto.randomUUID();
             resourceMap.set(resourceName, resourceId);
@@ -102,78 +139,78 @@
             resourceNodes.push({
               id: resourceId,
               type: 'resource',
+              silo_id: siloId, // Make sure this is set
               position: {
                 x: 100 + (resourceNodes.length % 3) * 300,
                 y: 400 + Math.floor(resourceNodes.length / 3) * 150
               },
-              siloId,
+              title: resourceName || 'Unnamed Resource',
               data: {
-                title: resourceName,
                 description: ''
               },
               portPositions: {
                 input: { x: 0, y: 30 },
                 output: { x: 150, y: 30 }
               },
+              user_id: currentUser.id, // Set the user_id directly instead of null
               updated_at: new Date().toISOString(),
               created_at: new Date().toISOString(),
             });
           }
 
           const resourceId = resourceMap.get(resourceName);
-          edges.push({
-            id: crypto.randomUUID(),
-            source: task.id,
-            target: resourceId,
-            siloId,
-            pathType: 'bezier',
-            pathData: calculateConnectionPath(
-              nodeData.find(n => n.id === task.id),
-              resourceNodes.find(n => n.id === resourceId),
-              'output',
-              'input'
-            )
-          });
+          if (resourceId) {
+            const sourceNodeId = nodeData[index].id; // Use the correct node ID
+            
+            edges.push({
+              id: crypto.randomUUID(),
+              source: sourceNodeId,
+              target: resourceId,
+              silo_id: siloId,
+              pathType: 'bezier',
+              pathData: calculateConnectionPath(
+                nodeData.find(n => n.id === sourceNodeId)!,
+                resourceNodes.find(n => n.id === resourceId)!,
+                'output',
+                'input'
+              )
+            });
+          }
         });
       });
 
-      // Combine all nodes and edges
+      // Combine all nodes
       const allNodes = [...nodeData, ...resourceNodes];
       
-      // Get the current user information
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      
-      if (!currentUser) {
-        throw new Error('No user is currently logged in');
+      // Only create new silo if not in integration mode
+      if (!integrationMode) {
+        const { error: siloError } = await supabase
+          .from('silos')
+          .insert({
+            id: siloId,
+            name: siloName,
+            user_id: currentUser.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          
+        if (siloError) throw siloError;
       }
       
-      // First, create the silo in Supabase
-      const { data: siloData, error: siloError } = await supabase
-        .from('silos')
-        .insert({
-          id: siloId,
-          name: siloName,
+      // Insert nodes
+      if (allNodes.length > 0) {
+        const nodeInserts = allNodes.map(node => ({
+          id: node.id,
+          silo_id: siloId, // Make sure to use the correct siloId
+          type: node.type,
+          position: node.position,
+          title: node.title,
+          data: node.data,
           user_id: currentUser.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select();
+          created_at: node.created_at,
+          updated_at: node.updated_at
+        }));
         
-      if (siloError) throw siloError;
-      
-      // Next, insert all nodes
-      const nodeInserts = allNodes.map(node => ({
-        id: node.id,
-        silo_id: siloId,
-        type: node.type,
-        position: node.position,
-        data: node.data,
-        user_id: currentUser.id,
-        created_at: node.created_at,
-        updated_at: node.updated_at
-      }));
-      
-      if (nodeInserts.length > 0) {
         const { error: nodesError } = await supabase
           .from('nodes')
           .insert(nodeInserts);
@@ -181,20 +218,20 @@
         if (nodesError) throw nodesError;
       }
       
-      // Finally, insert all edges
-      const edgeInserts = edges.map(edge => ({
-        id: edge.id,
-        silo_id: siloId,
-        source: edge.source,
-        target: edge.target,
-        path_type: edge.pathType,
-        path_data: edge.pathData,
-        user_id: currentUser.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
-      
-      if (edgeInserts.length > 0) {
+      // Insert edges
+      if (edges.length > 0) {
+        const edgeInserts = edges.map(edge => ({
+          id: edge.id,
+          silo_id: siloId, // Make sure to use the correct siloId
+          source: edge.source,
+          target: edge.target,
+          path_type: edge.pathType,
+          path_data: edge.pathData,
+          user_id: currentUser.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }));
+        
         const { error: edgesError } = await supabase
           .from('edges')
           .insert(edgeInserts);
@@ -202,23 +239,55 @@
         if (edgesError) throw edgesError;
       }
 
-      // Update local store
-      siloStore.update(store => [
-        ...store,
-        {
-          id: siloId,
-          name: siloName,
-          nodes: allNodes,
-          edges: edges,
-          isLoading: false
+      // For integration mode, fetch the existing silo name
+      let displayName = siloName;
+      if (integrationMode && existingSiloId) {
+        const { data: siloData } = await supabase
+          .from('silos')
+          .select('name')
+          .eq('id', existingSiloId)
+          .single();
+          
+        if (siloData) {
+          displayName = siloData.name;
         }
-      ]);
+      }
 
+      // Update store and navigate
+      siloStore.update(store => {
+        // If in integration mode, find and update the existing silo
+        if (integrationMode && existingSiloId) {
+          return store.map(silo => {
+            if (silo.id === existingSiloId) {
+              return {
+                ...silo,
+                nodes: [...silo.nodes, ...allNodes],
+                edges: [...silo.edges, ...edges],
+                isLoading: false
+              };
+            }
+            return silo;
+          });
+        } else {
+          // Otherwise add a new silo
+          return [
+            ...store,
+            {
+              id: siloId,
+              name: displayName,
+              nodes: allNodes,
+              edges: edges,
+              isLoading: false
+            }
+          ];
+        }
+      });
+      
       goto(`/silos/${siloId}`);
     }
   } catch (error) {
     console.error('Error:', error);
-    alert('Failed to process tasks');
+    alert(`Failed to process tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
   } finally {
     isLoading = false;
   }
