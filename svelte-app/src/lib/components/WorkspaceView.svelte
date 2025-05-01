@@ -131,7 +131,7 @@
 	}
 
 	function safeNodeTitle(node: SiloNode) {
-		return node.data?.title || 'Untitled Node';
+		return node.title || 'Untitled Node';
 	}
 
 	function updatePriority(node: SiloNode, priority: string) {

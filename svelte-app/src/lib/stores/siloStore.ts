@@ -397,7 +397,7 @@ export function createNode(type: NodeType, siloId: string, position: Position): 
     created_at: new Date().toISOString(),
     siloId,
     data: {
-      title: NODE_TYPES[type].name, // Default title
+
       description: '',
       status: 'not-started'
     },

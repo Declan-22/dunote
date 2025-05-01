@@ -18,7 +18,7 @@
   import { supabase } from '$lib/supabaseClient';
   
   export let node: SiloNode;
-  let editedTitle = node.data.title;
+
   let isEditingTitle = false;
   export let siloId: string;
   export let scale: number = 1;
@@ -32,7 +32,7 @@
   let nodeElement: HTMLElement | null = null;
   let nodePanelElement: HTMLDivElement;
   let titleInput: HTMLInputElement;
-  let newTitle = '';
+  let newTitle = node.title; 
   let isAddingComment = false;
   let commentText = '';
   // Add these variables to your script section
@@ -552,46 +552,28 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   
   // Save the edited title
   async function saveTitle() {
-  // Prevent empty titles
   if (!newTitle.trim()) {
-    newTitle = safeTitle;
+    newTitle = node.title;
     isEditingTitle = false;
     return;
   }
-  
+
   isEditingTitle = false;
   
-  // Create a deep copy of the node data
-  const updatedData = JSON.parse(JSON.stringify(node.data || {}));
-  updatedData.title = newTitle.trim();
-  
   try {
-    // First update the local store synchronously
-    siloStore.update(stores => {
-      return stores.map(s => {
-        if (s.id !== siloId) return s;
-        return {
-          ...s,
-          nodes: s.nodes.map(n => {
-            if (n.id !== node.id) return n;
-            return {
-              ...n,
-              data: updatedData
-            };
-          })
-        };
-      });
-    });
+    // Update local store
+    siloStore.update(stores => stores.map(s => ({
+      ...s,
+      nodes: s.nodes.map(n => n.id === node.id ? {...n, title: newTitle.trim()} : n)
+    })));
 
-    // Then sync with database
+    // Update database
     const { error } = await supabase
       .from('nodes')
-      .update({ data: updatedData })
+      .update({ title: newTitle.trim() })
       .eq('id', node.id);
 
     if (error) throw error;
-    
-    console.log('Title updated successfully:', newTitle);
   } catch (err) {
     console.error('Failed to update node title:', err);
   }
@@ -1080,7 +1062,7 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
     <!-- Node label and description -->
     <div class="node-info" >
       <div class="node-title">
-        {safeTitle}</div>
+        {node.title}</div>
       <div class="node-description">{nodeData.shortDescription || getShortDescription(safeDescription)}</div>
     </div>
   </div>
@@ -1127,7 +1109,7 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
        transition:fade={{ duration: 150 }}
        style="transform: translate({contextMenuPosition.x}px, {contextMenuPosition.y}px)">
       <div class="menu-header">
-        <span>{safeTitle}</span>
+        <span>{node.title}</span>
         <button class="close-btn" on:click|stopPropagation={closeContextMenu}>×</button>
       </div>
     {#if node.type === 'resource'}

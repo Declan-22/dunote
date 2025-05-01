@@ -4,12 +4,11 @@ import type { NodeType } from '$lib/types/nodes';
 import type { Node, NodeData, Connection } from '$lib/types/nodes';
 
 export function validateNode(node: SiloNode): SiloNode {
-  // Ensure required fields exist
   return {
     ...node,
+    title: node.title || NODE_TYPES[node.type].name, // Validate top-level title
     data: {
       ...node.data,
-      title: node.data?.title || NODE_TYPES[node.type].name,
       description: node.data?.description || '',
       url: validateUrl(node.data?.url),
       status: node.data?.status || 'not-started'
