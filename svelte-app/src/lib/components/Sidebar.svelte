@@ -70,6 +70,14 @@ async function loadUserProfile() {
 
   if (!error) userProfile = data;
 }
+
+const profileNavItem = { 
+    id: 'profile', 
+    name: 'Profile', 
+    href: '/profile', 
+    icon: 'user', 
+    default: false 
+  };
   
   // Default navigation items
   const defaultNavItems = [
@@ -763,33 +771,54 @@ function resetToDefaults() {
           </button>
       
           {#if showProfileCard}
-            <div 
-              class="absolute profile-card z-50 min-w-[240px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-lg p-4"
-              style={`left: ${$sidebarCollapsed ? profileCardPosition.x + 90 : profileCardPosition.x + 5}px; 
-                     top: ${profileCardPosition.y - 80}px;`}
-              transition:fly={{ y: 10, duration: 200 }}
-            >
-              <div class="flex items-center gap-3 mb-4">
-                <div class="w-10 h-10 rounded-full bg-[var(--brand-green)] flex items-center justify-center text-white">
-                  {getDisplayName().charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p class="font-medium">{getDisplayName()}</p>
-                  <p class="text-sm text-[var(--text-secondary)]">{$user.email}</p>
-                </div>
+          <div 
+            class="absolute profile-card z-50 min-w-[240px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-lg p-4"
+            style={`left: ${$sidebarCollapsed ? profileCardPosition.x + 90 : profileCardPosition.x + 5}px; 
+                   top: ${profileCardPosition.y - 80}px;`}
+            transition:fly={{ y: 10, duration: 200 }}
+          >
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 rounded-full bg-[var(--brand-green)] flex items-center justify-center text-white">
+                {getDisplayName().charAt(0).toUpperCase()}
               </div>
-              
-              <button 
-                on:click={async () => {
-                  await supabase.auth.signOut();
-                  showProfileCard = false;
-                }}
-                class="w-full py-2 px-4 text-left hover:bg-[var(--bg-primary)] rounded transition-colors text-sm"
-              >
-                Log Out
-              </button>
+              <div>
+                <p class="font-medium">{getDisplayName()}</p>
+                <p class="text-sm text-[var(--text-secondary)]">{$user.email}</p>
+              </div>
             </div>
-          {/if}
+            
+            <!-- Add profile link -->
+            <button 
+              on:click={() => {
+                goto('/profile');
+                showProfileCard = false;
+              }}
+              class="w-full py-2 px-4 text-left hover:bg-[var(--bg-primary)] rounded transition-colors text-sm mb-2"
+            >
+              Profile
+            </button>
+            
+            <button 
+              on:click={() => {
+                goto('/settings');
+                showProfileCard = false;
+              }}
+              class="w-full py-2 px-4 text-left hover:bg-[var(--bg-primary)] rounded transition-colors text-sm mb-2"
+            >
+              Settings
+            </button>
+            
+            <button 
+              on:click={async () => {
+                await supabase.auth.signOut();
+                showProfileCard = false;
+              }}
+              class="w-full py-2 px-4 text-left hover:bg-[var(--bg-primary)] rounded transition-colors text-sm"
+            >
+              Log Out
+            </button>
+          </div>
+        {/if}
         </div>
       {:else}
         <!-- Login Form -->
