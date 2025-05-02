@@ -27,7 +27,7 @@
             .filter(node => node.type === 'task' && !node.data?.isComplete)
             .map(task => ({
               id: task.id,
-              title: task.data?.title || 'Untitled Task',
+              title: task.title || 'Untitled Task',
               priority: task.data?.priority || 'medium',
               dueDate: task.data?.dueDate || null,
               siloId: silo.id,
