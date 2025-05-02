@@ -306,12 +306,7 @@
     <div class="relative mt-25 mb-55">
       <TaskDump bind:value={taskInput} on:process={handleProcess} />
       
-      {#if isLoading}
-        <div class="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center rounded-lg">
-          <div class="spinner border-4 border-blue-500 border-t-transparent h-12 w-12 rounded-full animate-spin"></div>
-          <span class="ml-3 text-white font-medium">Generating Smart Plan...</span>
-        </div>
-      {/if}
+
 
 
     </div>
