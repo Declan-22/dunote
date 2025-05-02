@@ -44,7 +44,7 @@
         });
       }
       
-      isLoading = false;
+      isLoading = true;
     });
     
     function toggleExpanded() {
@@ -83,10 +83,12 @@
     </div>
     
     {#if isLoading}
-      <div class="flex justify-center py-8">
-        <div class="h-6 w-6 border-2 border-t-[var(--brand-green)] rounded-full animate-spin"></div>
-      </div>
-    {:else if tasks.length === 0}
+  <div class="dot-matrix-loader">
+    {#each { length: 5 } as _, i}
+      <div class="matrix-dot" style="--index: {i}"></div>
+    {/each}
+  </div>
+{:else if tasks.length === 0}
       <div class="bg-[var(--bg-secondary)] rounded-xl p-4 border border-[var(--border-color)] text-center">
         <p class="text-sm text-[var(--text-secondary)]">No tasks yet. Add tasks to get started.</p>
       </div>
@@ -176,3 +178,52 @@
       </div>
     {/if}
   </div>
+
+<style>
+  .dot-matrix-loader {
+    width: 60px;
+    height: 60px;
+    position: relative;
+    margin: 2rem auto;
+  }
+
+  .matrix-dot {
+    width: 12px;
+    height: 12px;
+    background: #333;
+    border-radius: 50%;
+    position: absolute;
+    animation: matrix-dance 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    opacity: 0.9;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .matrix-dot:nth-child(1) { left: 0; top: 0; animation-delay: 0s }
+  .matrix-dot:nth-child(2) { left: 24px; top: 0; animation-delay: 0.2s }
+  .matrix-dot:nth-child(3) { left: 48px; top: 0; animation-delay: 0.4s }
+  .matrix-dot:nth-child(4) { left: 24px; top: 24px; animation-delay: 0.6s }
+  .matrix-dot:nth-child(5) { left: 0; top: 48px; animation-delay: 0.8s }
+
+  @keyframes matrix-dance {
+    0%, 100% {
+      transform: translate(0, 0);
+      background: #333;
+    }
+    20% {
+      transform: translate(12px, 24px);
+      background: #666;
+    }
+    40% {
+      transform: translate(24px, -12px);
+      background: #999;
+    }
+    60% {
+      transform: translate(-12px, 12px);
+      background: #ccc;
+    }
+    80% {
+      transform: translate(0, 24px);
+      background: #eee;
+    }
+  }
+  </style>

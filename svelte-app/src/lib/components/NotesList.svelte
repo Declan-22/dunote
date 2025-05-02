@@ -173,9 +173,11 @@
 
   <!-- Loading State -->
   {#if isLoading}
-      <div class="flex justify-center py-12">
-          <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[var(--brand-green)]"></div>
-      </div>
+  <div class="hex-loader">
+    {#each { length: 6 } as _, i}
+      <div class="hex-dot" style="--index: {i}"></div>
+    {/each}
+  </div>
   {:else if !isAuthenticated && !notes.length}
       <div class="bg-[var(--bg-secondary)] rounded-lg p-8 text-center border border-[var(--border-color)]">
           <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -329,4 +331,52 @@
         -webkit-box-orient: vertical;
 
     }
+
+    .hex-loader {
+    width: 80px;
+    height: 80px;
+    position: relative;
+    margin: 2rem auto;
+  }
+
+  .hex-dot {
+    width: 14px;
+    height: 14px;
+    background: #444;
+    border-radius: 50%;
+    position: absolute;
+    animation: hex-dance 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    opacity: 0.9;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .hex-dot:nth-child(1) { left: 33px; top: 0; animation-delay: 0s }
+  .hex-dot:nth-child(2) { left: 56px; top: 20px; animation-delay: 0.2s }
+  .hex-dot:nth-child(3) { left: 48px; top: 50px; animation-delay: 0.4s }
+  .hex-dot:nth-child(4) { left: 18px; top: 50px; animation-delay: 0.6s }
+  .hex-dot:nth-child(5) { left: 0; top: 20px; animation-delay: 0.8s }
+  .hex-dot:nth-child(6) { left: 18px; top: 0; animation-delay: 1.0s }
+
+  @keyframes hex-dance {
+    0%, 100% {
+      transform: translate(0, 0);
+      background: #333;
+    }
+    20% {
+      transform: translate(8px, -10px);
+      background: #666;
+    }
+    40% {
+      transform: translate(-6px, 12px);
+      background: #999;
+    }
+    60% {
+      transform: translate(10px, 8px);
+      background: #ccc;
+    }
+    80% {
+      transform: translate(-8px, -6px);
+      background: #eee;
+    }
+  }
   </style>

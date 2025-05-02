@@ -1,6 +1,7 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
 import { supabase } from '$lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
+import { get } from 'svelte/store';  // Add this import
 
 // Define types for the user stats
 interface TimeMetric {
@@ -441,17 +442,18 @@ export const activeTimer: Writable<TimerState> = writable({
   }
 
   export async function stopTimer() {
-    let timer: TimerState;
-    activeTimer.subscribe(t => { timer = t; })();
+    const timer = get(activeTimer);  // Get current timer state synchronously
     
     if (timer.running) {
-      if (timer.intervalId) clearInterval(timer.intervalId);
-      
+      if (timer.intervalId) {
+        clearInterval(timer.intervalId);
+      }
+  
       const minutes = Math.floor(timer.elapsedSeconds / 60);
       if (minutes > 0 && timer.startTime) {
         await trackWorkMinutes(minutes, timer.type);
       }
-      
+  
       activeTimer.set({
         running: false,
         startTime: null,
