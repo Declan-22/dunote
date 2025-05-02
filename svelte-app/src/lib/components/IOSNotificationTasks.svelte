@@ -44,7 +44,7 @@
         });
       }
       
-      isLoading = true;
+      isLoading = false;
     });
     
     function toggleExpanded() {
