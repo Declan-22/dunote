@@ -487,7 +487,7 @@ function openResourceEditor(resourceId: string) {
 	}
 
 	function safeNodeTitle(node: SiloNode) {
-		return node.data?.title || 'Untitled Node';
+		return node.title || 'Untitled Node';
 	}
 
 	function getPriorityColor(priority: string) {
