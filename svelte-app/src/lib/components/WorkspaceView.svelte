@@ -6,6 +6,9 @@
 	import { siloStore, executeNodeFunction } from '$lib/stores/siloStore';
 	import { fade, slide } from 'svelte/transition';
 	import type { Silo, SiloNode, SiloEdge } from '$lib/stores/siloStore';
+    import { noteStore } from '$lib/stores/noteStore';
+    
+    
 
 	export let siloId: string;
 	let isLoading = true;
@@ -19,6 +22,10 @@
 	let selectedFilter = 'Priority';
     let shareLink: string | null = null;
     let isGeneratingLink = false;
+    let selectedResourceOption = null;
+    let userNotes = [];
+    let notesLoading = false;
+    let noteSearchQuery = '';
     
 
     $: commissionNodes = (silo?.nodes || []).filter(n => ['client', 'contract', 'payment', 'deliverable'].includes(n.type)) || [];
@@ -26,7 +33,12 @@
     $: clientNode = commissionNodes.find(n => n.type === 'client');
     $: contractNode = commissionNodes.find(n => n.type === 'contract');
     $: shareLink = hasCommissionNodes ? `${window.location.origin}/share/${siloId}/${clientNode?.id}` : '';
-
+    $: filteredNotes = noteSearchQuery 
+        ? userNotes.filter(note => 
+            note.title?.toLowerCase().includes(noteSearchQuery.toLowerCase()) || 
+            stripHtml(note.content)?.toLowerCase().includes(noteSearchQuery.toLowerCase())
+          )
+        : userNotes;
 
 	$: silo = $siloStore.find(s => s.id === siloId);
 	$: taskNodes = (silo?.nodes || []).filter(n => n.type === 'task') || [];
@@ -113,6 +125,65 @@
       throw new Error('Failed to create share link. Please try again.');
     }
   }
+
+  function stripHtml(html) {
+        if (!html) return '';
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        return doc.body.textContent || '';
+    }
+    
+    function selectResourceOption(option) {
+        selectedResourceOption = option;
+        
+        if (option === 'attach') {
+            loadUserNotes();
+        }
+    }
+    
+    async function loadUserNotes() {
+        notesLoading = true;
+        try {
+            userNotes = await noteStore.loadNotes();
+        } catch (error) {
+            console.error('Failed to load notes:', error);
+        } finally {
+            notesLoading = false;
+        }
+    }
+    
+    function selectNote(note) {
+        // Set the resource content based on the note
+        editableResourceTitle = note.title || 'Note Link';
+        editableResourceContent = `Note: ${note.title}\n\nID: ${note.id}\n\n${stripHtml(note.content).substring(0, 100)}...`;
+        
+        // Here you'd handle the note attachment logic
+        // This depends on how you want to implement the relationship between resources and notes
+        attachNoteToResource(note.id);
+        
+        // Return to editor to review before saving
+        selectedResourceOption = 'new';
+    }
+    
+    function attachNoteToResource(noteId) {
+        // This function would handle the actual relationship
+        // You might want to extend your resource model to include noteId
+        console.log(`Attaching note ${noteId} to current resource`);
+        // Implementation depends on your data model
+    }
+    
+    function createNewNote() {
+        // Create a new note and then attach it
+        noteStore.createNewNote().then(note => {
+            // Navigate to note editor or handle as needed
+            console.log('Created new note:', note);
+            // You might want to redirect to the note editor here
+        });
+    }
+    
+    // Reset the selected option when the modal is closed
+    $: if (!isEditingResource) {
+        selectedResourceOption = null;
+    }
 
 	function getNodeStatus(node: SiloNode) {
 		return node.data?.result?.new_status || node.data?.status || 'not-started';
@@ -648,16 +719,69 @@
 
         <!-- RESOURCE EDITOR MODAL (ORIGINAL) -->
         {#if isEditingResource}
-            <div class="fixed inset-0 bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50" 
-                 transition:fade={{ duration: 150 }}>
+        <div class="fixed inset-0 bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50" 
+             transition:fade={{ duration: 150 }}
+             on:click|self={() => isEditingResource = false}>
+            
+            {#if !selectedResourceOption}
+                <!-- Initial Selection Modal -->
+                <div class="bg-[var(--bg-primary)] rounded-lg shadow-xl border border-[var(--border-color)] border-opacity-20 w-full max-w-md mx-2"
+                     transition:slide={{ duration: 150 }}>
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-lg font-semibold text-[var(--text-primary)]">Resource Options</h3>
+                            <button on:click={() => isEditingResource = false} 
+                                    class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <!-- Create New Option -->
+                            <button 
+                                on:click={() => selectResourceOption('new')}
+                                class="w-full group flex items-center p-4 border border-[var(--border-color)] border-opacity-30 rounded-lg bg-[var(--bg-secondary)] hover:border-[var(--brand-green)] hover:bg-[var(--bg-accent)] transition-all duration-200">
+                                <div class="flex-shrink-0 mr-4 p-2 rounded-full bg-[var(--node-icon-bg)] group-hover:bg-[var(--brand-green)] group-hover:bg-opacity-20 transition-colors duration-200">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-[var(--brand-accent)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 5v14m-7-7h14" />
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <h4 class="text-[var(--text-primary)] font-medium">New Resource</h4>
+                                    <p class="text-[var(--text-secondary)] text-sm">Create from scratch</p>
+                                </div>
+                            </button>
+                            
+                            <!-- Link Note Option -->
+                            <button 
+                                on:click={() => selectResourceOption('attach')}
+                                class="w-full group flex items-center p-4 border border-[var(--border-color)] border-opacity-30 rounded-lg bg-[var(--bg-secondary)] hover:border-[var(--brand-green)] hover:bg-[var(--bg-accent)] transition-all duration-200">
+                                <div class="flex-shrink-0 mr-4 p-2 rounded-full bg-[var(--node-icon-bg)] group-hover:bg-[var(--brand-green)] group-hover:bg-opacity-20 transition-colors duration-200">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-[var(--brand-accent)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <h4 class="text-[var(--text-primary)] font-medium">Link Note</h4>
+                                    <p class="text-[var(--text-secondary)] text-sm">Attach existing note</p>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            
+            {:else if selectedResourceOption === 'new'}
+                <!-- New Resource Editor -->
                 <div class="bg-[var(--bg-primary)] rounded-lg shadow-xl w-full max-w-2xl mx-2"
                      transition:slide={{ duration: 150 }}>
                     <div class="p-6">
                         <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-semibold text-[var(--text-primary)]">Edit Resource</h3>
-                            <button on:click={() => isEditingResource = false} class="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            <h3 class="text-lg font-semibold text-[var(--text-primary)]">New Resource</h3>
+                            <button on:click={() => selectedResourceOption = null} class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 12H5M12 19l-7-7 7-7" />
                                 </svg>
                             </button>
                         </div>
@@ -674,7 +798,7 @@
                             />
                         </div>
                         
-                        <div class="mb-4">
+                        <div class="mb-5">
                             <label for="resourceContent" class="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                                 Content
                             </label>
@@ -687,24 +811,97 @@
                         
                         <div class="flex justify-end space-x-3">
                             <button 
-                                on:click={() => isEditingResource = false} 
-                                class="px-4 py-2 border border-[var(--border-color)] rounded-md text-sm font-medium text-[var(--text-secondary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)]"
+                                on:click={() => selectedResourceOption = null} 
+                                class="px-4 py-2 border border-[var(--border-color)] rounded-md text-sm font-medium text-[var(--text-secondary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-primary)] transition-colors duration-200"
                             >
-                                Cancel
+                                Back
                             </button>
                             <button 
                                 on:click={saveResourceEdit} 
-                                class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[var(--brand-green)] hover:bg-[var(--brand-green-light)]"
+                                class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[var(--brand-green)] hover:bg-[var(--brand-green-light)] transition-colors duration-200"
                             >
                                 Save Changes
                             </button>
                         </div>
                     </div>
                 </div>
-            </div>
+                
+            {:else if selectedResourceOption === 'attach'}
+                <!-- Note Selection -->
+                <div class="bg-[var(--bg-primary)] rounded-lg shadow-xl w-full max-w-2xl mx-2"
+                     transition:slide={{ duration: 150 }}>
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold text-[var(--text-primary)]">Link Existing Note</h3>
+                            <button on:click={() => selectedResourceOption = null} class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        {#if notesLoading}
+                            <div class="flex justify-center items-center py-12">
+                                <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--brand-green)]"></div>
+                            </div>
+                        {:else if userNotes && userNotes.length > 0}
+                            <div class="mb-4">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search notes..." 
+                                    bind:value={noteSearchQuery}
+                                    class="w-full px-3 py-2 border border-[var(--border-color)] rounded-md shadow-sm focus:outline-none focus:ring-[var(--brand-green)] focus:border-[var(--brand-green)] bg-[var(--bg-secondary)] text-[var(--text-primary)] mb-3"
+                                />
+                                
+                                <div class="max-h-80 overflow-y-auto pr-1 space-y-2">
+                                    {#each filteredNotes as note (note.id)}
+                                        <button 
+                                            on:click={() => selectNote(note)}
+                                            class="w-full text-left p-3 rounded-md border border-[var(--border-color)] hover:border-[var(--brand-green)] hover:bg-[var(--bg-accent)] transition-all duration-200 group">
+                                            <div class="flex justify-between items-center">
+                                                <h4 class="font-medium text-[var(--text-primary)] truncate">{note.title || 'Untitled Note'}</h4>
+                                                <span class="text-xs text-[var(--text-secondary)]">
+                                                    {new Date(note.updated_at).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <p class="text-sm text-[var(--text-secondary)] mt-1 line-clamp-2">
+                                                {note.content ? stripHtml(note.content) : 'No content'}
+                                            </p>
+                                            <div class="flex justify-end mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                <span class="text-xs text-[var(--brand-accent)]">Click to attach</span>
+                                            </div>
+                                        </button>
+                                    {/each}
+                                </div>
+                            </div>
+                        {:else}
+                            <div class="text-center py-8">
+                                <p class="text-[var(--text-secondary)]">No notes found</p>
+                                <button 
+                                    on:click={createNewNote}
+                                    class="mt-3 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[var(--brand-green)] hover:bg-[var(--brand-green-light)] transition-colors duration-200">
+                                    Create New Note
+                                </button>
+                            </div>
+                        {/if}
+                        
+                        <div class="flex justify-end space-x-3 mt-4">
+                            <button 
+                                on:click={() => selectedResourceOption = null} 
+                                class="px-4 py-2 border border-[var(--border-color)] rounded-md text-sm font-medium text-[var(--text-secondary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-primary)] transition-colors duration-200"
+                            >
+                                Back
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
 			{/if}
+            
 		</div>
 		{/if}
+    </div>
+    {/if}
 
 
 <style>

@@ -6,7 +6,7 @@
 
 :root {
   /* Base Colors */
-  --dark-bg: #1a1d1f;
+  --dark-bg: #141414;
   --light-bg: #ffffff;
   --brand-green: #0d6d43;
   --brand-green-light: #2abe7e;
@@ -42,9 +42,9 @@
   --neutral-800: #424242;
   
   /* Card and Border Colors */
-  --card-dark: #232627;
+  --card-dark: #1c1c1c;
   --card-light: #ececec;
-  --border-dark: #2e2e2e;
+  --border-dark: #202020;
   --border-light: #e6e8e9;
   
   /* Shadows */

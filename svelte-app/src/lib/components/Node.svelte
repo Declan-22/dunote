@@ -16,7 +16,7 @@
   import { noteStore } from '$lib/stores/noteStore';
   import { user } from '$lib/stores/userStore';
   import { supabase } from '$lib/supabaseClient';
-  
+  export let contextNodeId: string | null;
   export let node: SiloNode;
 
   let isEditingTitle = false;
@@ -853,7 +853,7 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
 <div class="node {nodeClass}" 
   bind:this={nodeElement}
   class:dragging={isDragging}
-  style="left: {node.position.x}px; top: {node.position.y}px;"
+ style="left: {node.position.x}px; top: {node.position.y}px; opacity: {contextNodeId ? (contextNodeId === node.id ? 1 : 0.3) : 1};"
   on:mousedown={handleMouseDown}
   on:mousemove={handleMouseMove}
   on:mouseup={handleMouseUp}

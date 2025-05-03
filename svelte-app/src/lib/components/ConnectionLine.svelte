@@ -7,6 +7,10 @@ export let animated = false;
 export let scale = 1;
 export let edge: SiloEdge;
 export let viewport = { x: 0, y: 0, zoom: 1 };
+export let contextNodeId: string | null;
+  
+  // Check if connection belongs to context node
+  $: isContextConnection = contextNodeId && (edge.source === contextNodeId || edge.target === contextNodeId);
 
 // Calculate adjusted positions based on viewport
 $: adjusted = {
@@ -27,16 +31,22 @@ $: pathCommand = `M ${adjusted.sourceX} ${adjusted.sourceY}
                    
 $: pathClass = `connection-path ${selected ? 'selected' : ''} ${animated ? 'animated' : ''}`;
 </script>
-<path class={pathClass} d={pathCommand} marker-start="url(#startdot)" />
+<path 
+  class={pathClass} 
+  d={pathCommand} 
+  marker-start="url(#startdot)"
+  style="opacity: {contextNodeId ? (isContextConnection ? 1 : 0.3) : 1}"
+/>
 <svg class="connection-container" 
    width="100%" 
    height="100%" 
    style="position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0;">
-  <path 
-      d={pathCommand}
-      class={pathClass}
-      marker-start="url(#startdot)"
-  />
+   <path 
+   d={pathCommand}
+   class={pathClass}
+   marker-start="url(#startdot)"
+   style="opacity: {contextNodeId ? (isContextConnection ? 1 : 0.3) : 1}"
+ />
   
   <defs>
       <marker

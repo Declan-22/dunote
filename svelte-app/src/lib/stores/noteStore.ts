@@ -4,6 +4,7 @@ import { supabase } from '$lib/supabaseClient';
 import { user } from '$lib/stores/userStore';
 import { get } from 'svelte/store';
 
+
 export interface Node {
   id: string;
   type: string;
@@ -74,32 +75,18 @@ function createNoteStore() {
     },
 
     async loadNoteById(id: string) {
-      const userId = getCurrentUserId();
-      
       const { data, error } = await supabase
         .from('notes')
-        .select(`
-          *,
-          note_nodes:note_nodes (
-            node:node_id (id, type, position, data, siloId)
-          )
-        `)
+        .select('*')
         .eq('id', id)
-        .eq('user_id', userId) // Only fetch if it belongs to the user
         .single();
-
-      if (error) return null;
-
-      return {
-        ...data,
-        nodes: (data as any).note_nodes?.map(({ node }: { node: Partial<Node> }) => ({
-          id: node.id,
-          type: node.type,
-          position: node.position,
-          data: node.data,
-          siloId: node.siloId
-        })) ?? []
-      };
+    
+      if (!error && data) {
+        // Ensure content is always properly initialized
+        if (!data.content) data.content = '<p></p>';
+        return data;
+      }
+      return null;
     },
 
     async createNewNote(): Promise<Note> {
@@ -138,29 +125,16 @@ function createNoteStore() {
     },
 
     async saveNote(note: Partial<Note>) {
-      const userId = getCurrentUserId();
+      // Force content to be at least empty paragraph
+      const content = note.content?.trim() || '<p></p>';
       
-      // If not authenticated, don't save to database
-      if (!userId) {
-        console.warn('Cannot save note: User not authenticated');
-        return note as Note;
-      }
-      
-      // Create a clean copy without virtual properties
-      const { attachedNodes, nodes, ...noteToSave } = note;
-      
-      // Ensure the note has the current user's ID
-      noteToSave.user_id = userId;
-      
-      // Save just the note data
       const { data, error } = await supabase
         .from('notes')
-        .upsert(noteToSave)
+        .upsert({ ...note, content })
         .select()
         .single();
     
-      if (error) throw error;
-      return data;
+      return { data, error };
     },
 
     async getNoteById(id: string): Promise<Note | null> {
