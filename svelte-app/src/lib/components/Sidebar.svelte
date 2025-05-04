@@ -798,15 +798,7 @@ function resetToDefaults() {
               Profile
             </button>
             
-            <button 
-              on:click={() => {
-                goto('/settings');
-                showProfileCard = false;
-              }}
-              class="w-full py-2 px-4 text-left hover:bg-[var(--bg-primary)] rounded transition-colors text-sm mb-2"
-            >
-              Settings
-            </button>
+
             
             <button 
               on:click={async () => {
