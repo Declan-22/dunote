@@ -40,8 +40,6 @@
   let inputFocused = true;
 
 
-
-
   // Available columns with default visibility
   let availableColumns = [
     { id: 'name', label: 'Task Name', visible: true },
@@ -63,12 +61,6 @@ const columnPresets = {
     personal: ['name', 'due_date', 'status', 'priority', 'estimated_time'],
     commission: ['name', 'client', 'deliverable', 'due_date', 'status', 'priority']
 };
-
-let showMorePresets = false;
-  const maxVisiblePresets = 4;
-  
-  // Define your presets in a more manageable structure
-
 
 function applyColumnPreset(presetName: string) {
   activePreset = presetName;
@@ -337,23 +329,23 @@ async function refreshSilos() {
     
     <div class="input-buttons">
       <button 
-        on:click={() => applyColumnPreset('tasks')} 
-        class="input-button"
-        class:active={activePreset === 'tasks'}>
-        
-        <svg xmlns="http://www.w3.org/2000/svg"
-        width="16" height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round">
-     <path d="M9 12l2 2l4-4M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
-   </svg>
-        
-        Tasks
-      </button>
+      on:click={() => applyColumnPreset('tasks')} 
+      class="input-button"
+      class:active={activePreset === 'tasks'}>
+      
+      <svg xmlns="http://www.w3.org/2000/svg"
+      width="16" height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round">
+   <path d="M9 12l2 2l4-4M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
+ </svg>
+      
+      Tasks
+    </button>
         <button on:click={() => applyColumnPreset('client')} class="input-button">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -387,26 +379,6 @@ async function refreshSilos() {
         </button>
     </div>
 </div>
-
-{#each tables as table (table.id)}
-<div class="table-container">
-  <table class="task-table">
-    <thead>
-      <tr>
-        {#each table.columns.filter(c => c.visible) as col}
-          <th>{col.label}</th>
-        {/each}
-        <th class="actions-header"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each table.tasks as task (task.id)}
-        <!-- ... existing task row ... -->
-      {/each}
-    </tbody>
-  </table>
-</div>
-{/each}
     {:else}
         <div class="table-container" transition:fade={{ duration: 200 }}>
             <table class="task-table">
@@ -666,11 +638,6 @@ async function refreshSilos() {
     overflow-x: auto;
     padding-bottom: 4px;
 }
-.input-button.active {
-  background-color: var(--bg-accent);
-    color: var(--text-primary);
-    border: 1px solid var(--brand-green-light);
-  }
 
 .input-button {
     display: flex;
@@ -690,6 +657,11 @@ async function refreshSilos() {
 .input-button:hover {
     background-color: var(--background-hover);
     color: var(--text-primary);
+}
+.input-button.active {
+  background-color: var(--bg-accent);
+    color: var(--text-primary);
+    border: 1px solid var(--brand-green-light);
 }
 .input-button:focus {
     background-color: var(--bg-accent);
