@@ -17,6 +17,12 @@
       blocked_by?: string[];
       [key: string]: any; // For any additional properties
   }
+
+  interface TaskTable {
+    id: string;
+    columns: { id: string; label: string; visible: boolean }[];
+    tasks: Task[];
+  }
     
   const dispatch = createEventDispatcher();
   export let value = '';
@@ -29,15 +35,54 @@
   let user = null;
   let integrationMode = false;
   let selectedSiloId = '';
+  let tables: TaskTable[] = [];
+  let activePreset: string = 'tasks';
+  let inputFocused = true;
+
+
+
 
   // Available columns with default visibility
   let availableColumns = [
-      { id: 'name', label: 'Task Name', visible: true },
-      { id: 'due_date', label: 'Due Date', visible: true },
-      { id: 'status', label: 'Status', visible: true },
-      { id: 'priority', label: 'Priority', visible: true },
-      { id: 'resources', label: 'Resources', visible: true }
-  ];
+    { id: 'name', label: 'Task Name', visible: true },
+    { id: 'due_date', label: 'Due Date', visible: true },
+    { id: 'status', label: 'Status', visible: true },
+    { id: 'priority', label: 'Priority', visible: true },
+    { id: 'resources', label: 'Resources', visible: true },
+    { id: 'assigned_to', label: 'Assigned To', visible: false },
+    { id: 'estimated_time', label: 'Time Estimate', visible: false },
+    { id: 'client', label: 'Client', visible: false },
+    { id: 'deliverable', label: 'Deliverable', visible: false },
+    { id: 'milestone', label: 'Milestone', visible: false }
+];
+
+const columnPresets = {
+    tasks: ['name', 'priority', 'due_date', 'status', 'resources'],
+    client: ['name', 'client', 'due_date', 'status', 'deliverable'],
+    project: ['name', 'milestone', 'due_date', 'status', 'priority'],
+    personal: ['name', 'due_date', 'status', 'priority', 'estimated_time'],
+    commission: ['name', 'client', 'deliverable', 'due_date', 'status', 'priority']
+};
+
+let showMorePresets = false;
+  const maxVisiblePresets = 4;
+  
+  // Define your presets in a more manageable structure
+
+
+function applyColumnPreset(presetName: string) {
+  activePreset = presetName;
+    const preset = columnPresets[presetName];
+    if (preset) {
+        // First hide all columns
+        availableColumns = availableColumns.map(col => ({...col, visible: false}));
+        // Then show only the ones in the preset
+        availableColumns = availableColumns.map(col => ({
+            ...col, 
+            visible: preset.includes(col.id)
+        }));
+    }
+}
 
   const priorityColors = {
       high: 'var(--error)',
@@ -75,8 +120,22 @@
     } else if (error) {
       console.error('Error fetching silos:', error);
     }
+    
   }
-});
+  applyColumnPreset('tasks');
+    tables = [createNewTable()];
+  });
+  function createNewTable(): TaskTable {
+    return {
+      id: crypto.randomUUID(),
+      columns: JSON.parse(JSON.stringify(availableColumns)), // Deep copy
+      tasks: []
+    };
+  }
+
+  function arraysEqual(a: string[], b: string[]) {
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
 
   function addTask(e: KeyboardEvent) {
       if (e.key === 'Enter') {
@@ -98,7 +157,20 @@
           tableVisible = true;
           newTask = '';
           e.preventDefault();
+          const currentVisible = availableColumns.filter(c => c.visible).map(c => c.id);
+      const lastTable = tables[tables.length - 1];
+      const lastVisible = lastTable.columns.filter(c => c.visible).map(c => c.id);
+
+      if (!arraysEqual(currentVisible, lastVisible)) {
+        tables = [...tables, createNewTable()];
       }
+
+      const targetTable = tables[tables.length - 1];
+      targetTable.tasks = [...targetTable.tasks, ...newTasks];
+      newTask = '';
+      inputFocused = true; // Maintain focus
+      e.preventDefault();
+    }
   }
 
   function deleteTask(id: string) {
@@ -140,10 +212,13 @@
   }
   
   function toggleColumnVisibility(columnId: string) {
-      const column = availableColumns.find(c => c.id === columnId);
-      if (column) column.visible = !column.visible;
-      availableColumns = [...availableColumns]; 
-  }
+    availableColumns = availableColumns.map(col => {
+        if (col.id === columnId) {
+            return { ...col, visible: !col.visible };
+        }
+        return col;
+    });
+}
   
   function toggleIntegrationMode() {
   integrationMode = !integrationMode;
@@ -248,15 +323,90 @@ async function refreshSilos() {
   {/if}
 
   {#if !tableVisible}
-        <div class="input-container">
-            <input
-                class="floating-input font-mono"
-                bind:value={newTask}
-                on:keydown={addTask}
-                placeholder="Type your task and press Enter..."
-                autofocus
-            />
-        </div>
+  <div class="input-container">
+    <input
+      class="floating-input font-mono"
+      bind:value={newTask}
+      on:keydown={addTask}
+      on:focus={() => inputFocused = true}
+      on:blur={() => inputFocused = false}
+      class:focused={inputFocused}
+      placeholder="Type your task and press Enter..."
+      autofocus
+    />
+    
+    <div class="input-buttons">
+      <button 
+        on:click={() => applyColumnPreset('tasks')} 
+        class="input-button"
+        class:active={activePreset === 'tasks'}>
+        
+        <svg xmlns="http://www.w3.org/2000/svg"
+        width="16" height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round">
+     <path d="M9 12l2 2l4-4M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
+   </svg>
+        
+        Tasks
+      </button>
+        <button on:click={() => applyColumnPreset('client')} class="input-button">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            Client
+        </button>
+        <button on:click={() => applyColumnPreset('project')} class="input-button">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="3" y1="9" x2="21" y2="9"></line>
+                <line x1="9" y1="21" x2="9" y2="9"></line>
+            </svg>
+            Project
+        </button>
+        <button on:click={() => applyColumnPreset('personal')} class="input-button">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            Personal
+        </button>
+        <button on:click={() => applyColumnPreset('commission')} class="input-button">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+            Commission
+        </button>
+    </div>
+</div>
+
+{#each tables as table (table.id)}
+<div class="table-container">
+  <table class="task-table">
+    <thead>
+      <tr>
+        {#each table.columns.filter(c => c.visible) as col}
+          <th>{col.label}</th>
+        {/each}
+        <th class="actions-header"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {#each table.tasks as task (task.id)}
+        <!-- ... existing task row ... -->
+      {/each}
+    </tbody>
+  </table>
+</div>
+{/each}
     {:else}
         <div class="table-container" transition:fade={{ duration: 200 }}>
             <table class="task-table">
@@ -384,18 +534,29 @@ async function refreshSilos() {
     }
 
     .column-selector {
-        background: var(--bg-secondary);
-        padding: 12px;
-        border-radius: 6px;
-        margin-bottom: 12px;
-    }
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--border-color);
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    z-index: 10;
+}
 
-    .column-selector label {
-        display: flex;
-        gap: 8px;
-        padding: 4px 0;
-        cursor: pointer;
-    }
+.column-selector label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.column-selector input[type="checkbox"] {
+    appearance: auto; /* This fixes the checkbox issue */
+    width: 16px;
+    height: 16px;
+}
 
     .actions-header, .actions-cell {
         width: 32px;
@@ -494,11 +655,53 @@ async function refreshSilos() {
 
   /* Input styles when table is not visible */
   .input-container {
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.input-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+.input-button.active {
+  background-color: var(--bg-accent);
+    color: var(--text-primary);
+    border: 1px solid var(--brand-green-light);
+  }
+
+.input-button {
     display: flex;
     align-items: center;
-    padding: 10px 0;
+    gap: 6px;
+    padding: 6px 12px;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
 
-  }
+.input-button:hover {
+    background-color: var(--background-hover);
+    color: var(--text-primary);
+}
+.input-button:focus {
+    background-color: var(--bg-accent);
+    color: var(--text-primary);
+    border: 1px solid var(--brand-green-light);
+}
+
+.input-button svg {
+    width: 14px;
+    height: 14px;
+}
+
 
   .floating-input {
     width: 100%;
