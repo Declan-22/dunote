@@ -297,7 +297,7 @@
 <main class="min-h-screen bg-background-light dark:bg-background-dark p-8 transition-colors duration-300">
   <div class="max-w-3xl mx-auto">
     <div class="flex items-center justify-center mb-6">
-      <img src="dunotepen.svg" alt="dunote logo" class="h-12 w-12 mr-3 theme-logo" />
+      <img src="dunotepen.svg" alt="dunote logo" class="h-8 w-8 mr-5 theme-logo" />
       <p class="text-xl text-center font-serif text-[var(--text-primary)]">
         {welcomeMessage}
       </p>

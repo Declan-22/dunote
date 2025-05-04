@@ -1270,6 +1270,8 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
   }
   
   .node-container {
+    min-width: 0; /* Allow container to shrink */
+    flex-shrink: 1;
     display: flex;
     align-items: center;
     height: 60px;
