@@ -850,6 +850,8 @@ function handlePortMouseUp(e: MouseEvent, isOutput: boolean) {
 }
 </script>
 
+
+
 <div class="node {nodeClass}" 
   bind:this={nodeElement}
   class:dragging={isDragging}

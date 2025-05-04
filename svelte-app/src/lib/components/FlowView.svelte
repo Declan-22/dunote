@@ -33,6 +33,17 @@
     name: 'Loading...'
   };
 
+  let contextNodeId: string | null = null;
+  
+  // Add context menu handlers
+  function handleNodeContextMenu(event: CustomEvent<{ nodeId: string }>) {
+    contextNodeId = event.detail.nodeId;
+  }
+
+  function handleCloseContextMenu() {
+    contextNodeId = null;
+  }
+
   function handleCreateConnection(event: CustomEvent<{ source: string; target: string }>) {
   const { source, target } = event.detail;
   createConnection(siloId, source, target);
@@ -295,8 +306,12 @@ let debugShowState = false;
   <svg class="connections-layer" width="100%" height="100%">
     <!-- Existing connections -->
     {#each silo.edges as edge (edge.id)}
-      <ConnectionLine {edge} {viewport}/>
-    {/each}
+    <ConnectionLine 
+      {edge} 
+      {viewport}
+      contextNodeId={contextNodeId}
+    />
+  {/each}
     
     <!-- Drawing connection if active -->
     {#if isDrawingConnection && connectionStartNode !== currentHoverNodeId}
@@ -317,11 +332,14 @@ let debugShowState = false;
   <!-- HTML layer for nodes -->
   <div class="nodes-layer" style="transform: translate({viewport.x}px, {viewport.y}px) scale({viewport.zoom});">
     {#each silo.nodes as node (node.id)}
-     <Node 
-       {node}
-       {siloId}
-       {viewport}
-       scale={viewport.zoom}
+    <Node 
+      {node}
+      {siloId}
+      {viewport}
+      contextNodeId={contextNodeId}
+      scale={viewport.zoom}
+      on:contextmenu={handleNodeContextMenu}
+      on:closecontextmenu={handleCloseContextMenu}
        on:dragstart={handleNodeDragStart}
        on:drag={handleNodeDrag}
        on:dragend={handleNodeDragEnd}
@@ -335,6 +353,13 @@ let debugShowState = false;
 </div>
 
 <style>
+    .node {
+    transition: opacity 0.2s ease;
+  }
+  
+  .connection-path {
+    transition: opacity 0.2s ease;
+  }
   .flow-container {
     position: relative;
     width: 100%;

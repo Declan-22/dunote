@@ -8,6 +8,7 @@
     import { supabase } from '$lib/supabaseClient';
     import { Drawflow } from 'drawflow';
     import NotesList from '$lib/components/NotesList.svelte';
+    import { allTagsStore, loadAllTags, saveNoteTags, getNoteTagsByNoteId } from '$lib/stores/tagStore';
 
 
       // TipTap imports
@@ -85,6 +86,11 @@
     let isSearching = false;
     let searchResults = [];
     let savedTimeout: SavedTimeout;
+    let inputTags = [];
+  let draggedTag = null;
+  let dragSource = null;
+
+  $: memoryTags = $allTagsStore.filter(tag => !inputTags.includes(tag));
 
   
     onMount(async () => {
@@ -517,6 +523,53 @@ async function detachNode(nodeId: string) {
      };
      input.click();
     }
+
+
+    onMount(async () => {
+    await loadAllTags();
+    const noteTags = await getNoteTagsByNoteId(currentNote.id);
+    inputTags = [...noteTags];
+  });
+
+
+
+  function handleDragStart(event, tag, source) {
+    draggedTag = tag;
+    dragSource = source;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', tag);
+  }
+
+  function handleDragEnd() {
+    draggedTag = null;
+    dragSource = null;
+  }
+
+  function handleDragOver(event, target) {
+    event.preventDefault();
+    if (draggedTag && dragSource !== target) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }
+
+  async function handleDrop(event, target) {
+    event.preventDefault();
+    if (!draggedTag || dragSource === target) return;
+
+    let newInputTags;
+    if (dragSource === 'memory' && target === 'input') {
+      newInputTags = [...inputTags, draggedTag];
+    } else if (dragSource === 'input' && target === 'memory') {
+      newInputTags = inputTags.filter(t => t !== draggedTag);
+    } else return;
+
+    inputTags = newInputTags;
+    await saveNoteTags(currentNote.id, inputTags);
+    currentNote.tags = inputTags;
+
+    draggedTag = null;
+    dragSource = null;
+  }
   </script>
 
 {#if isLoading}
@@ -573,17 +626,24 @@ async function detachNode(nodeId: string) {
     
     <!-- Tags display -->
     {#if currentNote.tags && currentNote.tags.length > 0}
-      <div class="flex flex-wrap gap-2 mb-6" transition:slide>
-        {#each currentNote.tags as tag}
-          <div class="bg-[var(--brand-green-light)] text-[var(--light-text)] px-2 py-0.5 rounded-md text-sm flex items-center">
-            <span class="mr-1">#{tag}</span>
-            <button on:click={() => removeTag(tag)} class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200">
-              <X size={14} />
-            </button>
-          </div>
-        {/each}
-      </div>
-    {/if}
+    <div class="flex flex-wrap gap-1.5 mb-4 text-sm" transition:slide>
+      {#each currentNote.tags as tag}
+        <div
+          class="flex items-center gap-1 px-2 py-[2px] rounded-md shadow-sm border"
+          style="background-color: var(--pill-bg); color: var(--text-accent); border-color: var(--brand-accent);"
+        >
+          <span>#{tag}</span>
+          <button
+            on:click={() => removeTag(tag)}
+            class="hover:text-[var(--error)] transition-colors duration-150"
+            aria-label="Remove tag"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      {/each}
+    </div>
+  {/if}
     
     <!-- Attached nodes display -->
     {#if currentNote.attachedNodes && currentNote.attachedNodes.length > 0}
@@ -879,72 +939,152 @@ async function detachNode(nodeId: string) {
   
   <!-- Tags Modal -->
   {#if showTagModal}
+  <div 
+    class="fixed inset-0 bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50"
+    transition:fade={{ duration: 150 }}
+    on:click|self={() => showTagModal = false}
+  >
     <div 
-      class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50"
-      transition:fade={{ duration: 150 }}
-      on:click|self={() => showTagModal = false}
+      class="bg-[var(--bg-secondary)] rounded-lg shadow-xl max-w-md w-full p-6"
+      transition:fly={{ y: 20, duration: 200 }}
     >
-      <div 
-        class="bg-[var(--bg-secondary)] dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6"
-        transition:fly={{ y: 20, duration: 200 }}
-      >
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-lg font-medium">Manage Tags</h3>
-          <button on:click={() => showTagModal = false} class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-            <X size={20} />
-          </button>
-        </div>
-        
-        <div class="flex mb-4">
-          <input 
-            type="text" 
-            bind:value={newTag}
-            placeholder="Add a tag..." 
-            class="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            on:keydown={(e) => e.key === 'Enter' && addTag()}
-          />
-          <button 
-            on:click={addTag}
-            class="px-3 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            Add
-          </button>
-        </div>
-        
-        <div class="mb-4">
-          {#if currentNote.tags.length === 0}
-            <p class="text-gray-500 dark:text-gray-400 text-center py-2">No tags added yet</p>
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-medium">Manage Tags</h3>
+        <button 
+          on:click={() => showTagModal = false} 
+          class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <!-- Add Tag Input -->
+      <div class="flex mb-4">
+        <input 
+          type="text" 
+          bind:value={newTag}
+          placeholder="Add a tag..." 
+          class="flex-1 px-3 py-2 bg-[var(--bg-accent)] rounded-l-md focus:outline-none focus:ring-2 focus:ring-[var(--brand-green)]"
+          on:keydown={(e) => e.key === 'Enter' && addTag()}
+        />
+        <button 
+          on:click={addTag}
+          class="px-3 py-2 bg-[var(--brand-green)] text-white rounded-r-md hover:bg-[var(--brand-green-dark)] transition-colors"
+        >
+          Add
+        </button>
+      </div>
+
+      <!-- Current Tags -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium mb-2">Current Tags</label>
+        <div 
+          class="drop-zone bg-[var(--bg-accent)] border-[var(--border-color)]"
+          on:dragover={handleDragOver}
+          on:drop={(e) => handleDrop(e, 'input')}
+        >
+          {#if inputTags.length === 0}
+            <p class="text-[var(--text-secondary)] text-sm p-1">Drag tags here or add new ones above</p>
           {:else}
-            <div class="flex flex-wrap gap-2">
-              {#each currentNote.tags as tag}
-                <div class="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-md text-sm flex items-center">
-                  <span class="mr-1">#{tag}</span>
-                  <button on:click={() => removeTag(tag)} class="text-blue-600 dark:text-blue-400 hover:text-red-500">
-                    <X size={14} />
-                  </button>
-                </div>
-              {/each}
-            </div>
+            {#each inputTags as tag (tag)}
+              <div
+                class="tag-pill bg-[var(--brand-green-light)] text-[var(--brand-green-dark)]"
+                draggable="true"
+                on:dragstart={(e) => handleDragStart(e, tag, 'input')}
+                on:dragend={handleDragEnd}
+                animate:flip={{ duration: 200 }}
+                transition:scale={{ duration: 200 }}
+              >
+                <span class="mr-1">#{tag}</span>
+                <button 
+                  on:click={() => removeTag(tag)}
+                  class="ml-1 hover:text-[var(--brand-green-dark)] transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            {/each}
           {/if}
         </div>
-        
-        <div class="flex justify-end">
-          <button 
-            on:click={() => showTagModal = false}
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            Done
-          </button>
+      </div>
+
+      <!-- Tag Memory -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium mb-2">Frequent Tags</label>
+        <div 
+          class="drop-zone bg-[var(--bg-primary)] border-[var(--border-color)]"
+          on:dragover={handleDragOver}
+          on:drop={(e) => handleDrop(e, 'memory')}
+        >
+          {#if memoryTags.length === 0}
+            <p class="text-[var(--text-secondary)] text-sm p-1">No tags in memory</p>
+          {:else}
+            {#each memoryTags as tag (tag)}
+              <div
+                class="tag-pill bg-[var(--bg-accent)] text-[var(--text-primary)] hover:bg-[var(--bg-accent-dark)]"
+                draggable="true"
+                on:dragstart={(e) => handleDragStart(e, tag, 'memory')}
+                on:dragend={handleDragEnd}
+                animate:flip={{ duration: 200 }}
+                transition:scale={{ duration: 200 }}
+              >
+                <span>#{tag}</span>
+              </div>
+            {/each}
+          {/if}
         </div>
       </div>
+
+      <div class="flex justify-end">
+        <button 
+          on:click={() => showTagModal = false}
+          class="px-4 py-2 bg-[var(--brand-green)] text-white rounded-md hover:bg-[var(--brand-green-dark)] hover:scale-105 transition-all"
+        >
+          Done
+        </button>
+      </div>
     </div>
-  {/if}
+  </div>
+{/if}
 </div>
 {:else}
   <div class="text-center p-8">Note not found</div>
 {/if}
 
 <style>
+
+.tag-pill {
+  padding: 0.25rem 0.5rem;        /* px-2 py-1 */
+  border-radius: 0.375rem;        /* rounded-md */
+  font-size: 0.875rem;            /* text-sm */
+  display: flex;                  /* flex */
+  align-items: center;            /* items-center */
+  transition: all 0.2s;           /* transition-all duration-200 */
+  cursor: grab;
+}
+
+.tag-pill.dragging {
+  opacity: 0.5;                   /* opacity-50 */
+  transform: scale(0.95);         /* scale-95 */
+  cursor: grabbing;
+}
+
+.drop-zone {
+  min-height: 3rem;               /* min-h-12 */
+  padding: 0.5rem;                /* p-2 */
+  border-radius: 0.375rem;        /* rounded-md */
+  border: 1px solid #d1d5db;      /* default border color (gray-300) unless overridden */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;                    /* gap-2 */
+  transition: background-color 0.2s, border-color 0.2s; /* transition-colors duration-200 */
+}
+
+.drop-zone.active {
+  border-color: var(--brand-green);
+  background-color: var(--bg-accent);
+}
+
   .toolbar-btn {
     padding: 0.5rem;
     border-radius: 0.375rem;
