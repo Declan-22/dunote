@@ -370,7 +370,7 @@
         <!-- View Tabs -->
         <div class="flex space-x-1 sm:space-x-2 border-b border-[var(--bg-primary)]">
           <button 
-            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'flow' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'flow' ? 'text-slate-600 dark:text-slate-500 border-b-2 border-slate-600 dark:border-slate-400 bg-slate-50 dark:bg-slate-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
             on:click={() => setViewMode('flow')}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -380,7 +380,7 @@
             <span class="sm:inline hidden">Flow Editor</span>
           </button>
           <button 
-            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'output' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'output' ? 'text-slate-600 dark:text-slate-500 border-b-2 border-slate-600 dark:border-slate-400 bg-slate-50 dark:bg-slate-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}"
             on:click={() => setViewMode('output')}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
@@ -388,7 +388,7 @@
             <span class="sm:inline hidden">Output</span>
           </button>
           <button 
-            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'workspace' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'workspace' ? 'text-slate-600 dark:text-slate-500 border-b-2 border-slate-600 dark:border-slate-400 bg-slate-50 dark:bg-slate-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}"
             on:click={() => setViewMode('workspace')}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
@@ -398,7 +398,7 @@
             <span class="sm:inline hidden">Workspace</span>
           </button>
           <button 
-            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'timeline' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'timeline' ? 'text-slate-600 dark:text-slate-500 border-b-2 border-slate-600 dark:border-slate-400 bg-slate-50 dark:bg-slate-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
             on:click={() => setViewMode('timeline')}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="20" x2="12" y2="10"></line>
@@ -408,7 +408,7 @@
             <span class="sm:inline hidden">Timeline</span>
           </button>
           <button 
-            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'calendar' ? 'text-green-600 dark:text-green-600 border-b-2 border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}" 
+            class="tab-button flex items-center gap-2 px-4 py-3 font-medium rounded-t-lg transition-colors {currentView === 'calendar' ? 'text-slate-600 dark:text-slate-500 border-b-2 border-slate-600 dark:border-slate-400 bg-slate-50 dark:bg-slate-900/10' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/30'}"
             on:click={() => setViewMode('calendar')}>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>

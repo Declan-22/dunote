@@ -8,10 +8,10 @@
   /* Base Colors */
   --dark-bg: #141414;
   --light-bg: #ffffff;
-  --brand-green: #0d6d43;
-  --brand-green-light: #2abe7e;
-  --brand-green-dark: #0e5234;
-  --brand-green-accent: #009b534d;
+  --brand-green: #506185;
+  --brand-green-light: #7189bb;
+  --brand-green-dark: #313b51;
+  --brand-green-accent: #50618563;
 
   --button-bg: #000000;
   --button-text: #ffffff;
@@ -72,11 +72,11 @@
   --brand-accent: var(--brand-green-light);
   --brand-accent-muted: var(--brand-green);
   --text-accent: var(--brand-green-light);
-  --bg-accent: rgba(46, 190, 126, 0.15);
-  --pill-bg: rgba(46, 190, 126, 0.1);
-  --node-icon-bg: rgba(46, 190, 126, 0.2);
+  --bg-accent: rgba(46, 106, 190, 0.15);
+  --pill-bg: rgba(49, 74, 117, 0.1);
+  --node-icon-bg: rgba(46, 96, 190, 0.2);
   --bg-accenttwo: rgba(27, 27, 27, 0.322);
-  --bg-pricing: rgba(162, 201, 174, 0.507);
+  --bg-pricing: rgba(162, 177, 201, 0.507);
   --button-bg: #ffffff;
   --button-text: #000000;
 }
@@ -91,11 +91,11 @@
   --brand-accent: var(--brand-green-dark);
   --brand-accent-muted: var(--brand-green);
   --text-accent: var(--brand-green-dark);
-  --bg-accent: rgba(14, 82, 52, 0.1);
+  --bg-accent: rgba(75, 95, 137, 0.163);
   --pill-bg: rgba(14, 82, 52, 0.08);
-  --node-icon-bg: rgba(14, 82, 52, 0.15);
+  --node-icon-bg: rgba(14, 48, 82, 0.15);
   --bg-accenttwo: rgba(247, 247, 247, 0.938);
-  --bg-pricing: rgb(211, 241, 220);
+  --bg-pricing: rgb(211, 221, 241);
   --button-bg: #000000;
   --button-text: #ffffff;
 }
