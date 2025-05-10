@@ -2,6 +2,7 @@
   import '../app.css';
   let { children } = $props();
   import Sidebar from '$lib/components/Sidebar.svelte';
+  import Toolbar from '$lib/components/Toolbar.svelte';
   import { theme } from '$lib/stores/themeStore';
   import { sidebarCollapsed } from '$lib/stores/uiStore';
   import { siloStore } from '$lib/stores/siloStore';
@@ -18,9 +19,9 @@
   // Animation for main content margin
   const mainMargin = tweened(80, { duration: 300, easing: cubicOut });
 
- // Update margin when sidebar collapsed state changes
- $effect(() => {
-    mainMargin.set($sidebarCollapsed ? 80 : 256);
+  // Update margin when sidebar collapsed state changes
+  $effect(() => {
+mainMargin.set($sidebarCollapsed ? 0 : 180);
   });
 
   if (browser) {
@@ -83,6 +84,21 @@
     theme.update(t => t === 'dark' ? 'light' : 'dark');
   }
 
+  // Handle toolbar actions
+  function handleToolbarAction(event) {
+    const action = event.detail;
+    
+    if (action.type === 'toggle-theme') {
+      toggleTheme();
+    } else if (action.type === 'toggle-sidebar') {
+      sidebarCollapsed.update(value => !value);
+    } else if (action.type === 'navigate' && action.path) {
+      // Handle navigation here if needed
+    }
+    
+    // Other actions can be handled as needed
+  }
+
   onMount(() => {
     supabase.auth.getSession().then(({ data }) => {
       user.set(data.session?.user || null);
@@ -94,30 +110,18 @@
   });
 </script>
 
-<div class="flex min-h-screen">
-  <Sidebar />
+<div class="flex flex-col min-h-screen">
+  <Toolbar on:action={handleToolbarAction} />
+  <div class="h-7"></div>
+  
+  <div class="flex flex-1">
+    <Sidebar />
 
-  <main 
-    class="flex-1 bg-[var(--bg-primary)] transition-all duration-300 ease-out"
-    style="margin-left: {$mainMargin}px;"
-  >
-    <!-- Theme Toggle with improved styling -->
-    <button 
-      class="theme-toggle fixed top-4 right-4 z-50 p-2 rounded-full bg-[var(--bg-secondary)] shadow-md hover:scale-105 transition-transform duration-200"
-      on:click={toggleTheme}
-      aria-label="Toggle theme"
-    >
-      {#if $theme === 'dark'}
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-[var(--text-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-        </svg>
-      {:else}
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-[var(--text-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-        </svg>
-      {/if}
-    </button>
-
-    {@render children()}
-  </main>
+<main 
+  class="flex-1 bg-[var(--bg-primary)] transition-[margin-left] duration-300 ease-out pt-2"
+  style="margin-left: {$mainMargin}px;"
+>
+      {@render children()}
+    </main>
+  </div>
 </div>

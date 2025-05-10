@@ -524,29 +524,10 @@ function resetToDefaults() {
 <svelte:window on:click={handleClickOutside} />
 
 <aside 
-  class="fixed inset-y-0 z-50 bg-[var(--bg-secondary)] transition-all duration-300 ease-out shadow-lg rounded-2xl m-1 overflow-hidden flex flex-col"
-  style="width: {$sidebarWidth}px; max-height: calc(100vh - 10px);"
+  class="fixed top-7 inset-y-0 z-50 bg-[var(--bg-secondary)] transition-[left] duration-300 ease-out shadow-lg overflow-hidden flex flex-col w-[180px]"
+  style="left: {$sidebarCollapsed ? '-100%' : '0'}; max-height: calc(100vh - 10px);"
 >
-  <div class="flex flex-col h-full relative">
-    <!-- Collapse Toggle -->
-    <button
-      on:click={() => sidebarCollapsed.update((c) => !c)}
-      class="p-3 hover:bg-[var(--bg-primary)] transition-all duration-200 rounded-lg mx-2 mt-2 group"
-      in:fade={{ duration: 200 }}
-    >
-      <div class="flex items-center justify-center">
-        {#if $sidebarCollapsed}
-          <svg class="w-6 h-6 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        {:else}
-          <svg class="w-6 h-6 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-          </svg>
-          <span class="ml-3 text-sm font-medium" transition:fade={{ duration: 200 }}>Collapse</span>
-        {/if}
-      </div>
-    </button>
+
 
     <!-- Main Navigation -->
     <div class="flex-1 overflow-y-auto overflow-x-hidden">
@@ -854,7 +835,7 @@ function resetToDefaults() {
         {/if}
       {/if}
     </div>
-  </div>
+
 </aside>
 
       <!-- Context Menu -->
