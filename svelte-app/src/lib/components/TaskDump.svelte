@@ -257,48 +257,48 @@ async function refreshSilos() {
     <div class="header-controls">
       <button class="icon-button" on:click={toggleIntegrationMode} title="Toggle integration mode">
         <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M7.5 4.75a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m-2.25.75a2.25 2.25 0 1 1 3 2.122v3.906q.13-.096.27-.178c.949-.572 2.165-.739 3.198-.88l.179-.025c1.161-.162 2.102-.322 2.777-.777c.505-.342.937-.91 1.048-2.056a2.25 2.25 0 1 1 1.504.018c-.126 1.577-.738 2.622-1.712 3.28c-1.013.685-2.322.87-3.41 1.02l-.025.004c-1.17.162-2.107.292-2.786.7c-.315.19-.562.436-.737.782c-.18.354-.306.856-.306 1.584v1.378a2.251 2.251 0 1 1-1.5 0V7.622A2.25 2.25 0 0 1 5.25 5.5m11.25-.75a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m-9 13a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5" />
+          <path fill="currentColor" d="M7.5 4.75a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m-2.25.75a2.25 2.25 0 1 1 3 2.122v3.906q.13-.096.27-.178c.949-.572 2.165-.739 3.198-.88l.179-.025c1.161-.162 2.102-.322 2.777-.777c.505-.342.937-.91 1.048-2.056a2.25 2.25 0 1 1 1.504.018c-.126 1.577-.738 2.622-1.712 3.28c-1.013.685-2.322.87-3.41 1.02l-.025.004c-1.17.162-2.107.292-2.786.7c-.315.19-.562.436-.737.782c-.18.354-.306.856-.306 1.584v1.378a2.251 2.251 0 1 1-1.5 0V7.622A2.25 2.25 0 0 1 5.25 5.5m11.25-.75a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5m-9 13a.75.75 0 1 0 0 1.5a.75.75 0 0 0 0-1.5"/>
         </svg>
-    </button>
-        <button class="icon-button" on:click={() => columnSelectorOpen = !columnSelectorOpen}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-        </button>
-        <button class="help-button" on:click={() => showHelp = !showHelp}>?</button>
+      </button>
+      <button class="icon-button" on:click={() => columnSelectorOpen = !columnSelectorOpen}>
+        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <button class="help-button" on:click={() => showHelp = !showHelp}>?</button>
     </div>
   </div>
 
   {#if columnSelectorOpen}
-      <div class="column-selector" transition:fade>
-          {#each availableColumns as column}
-              <label>
-                  <input 
-                      type="checkbox" 
-                      bind:checked={column.visible}
-                      on:change={() => toggleColumnVisibility(column.id)}
-                  />
-                  {column.label}
-              </label>
-          {/each}
-      </div>
+    <div class="column-selector" transition:fade>
+      {#each availableColumns as column}
+        <label>
+          <input 
+            type="checkbox" 
+            bind:checked={column.visible}
+            on:change={() => toggleColumnVisibility(column.id)}
+          />
+          {column.label}
+        </label>
+      {/each}
+    </div>
   {/if}
 
   {#if integrationMode}
-  <div class="integration-selector" transition:fade>
-    <label>
-      Add tasks to existing silo:
-      <select bind:value={selectedSiloId}>
-        {#each availableSilos as silo}
-          <option value={silo.id}>{silo.name}</option> <!-- Changed from silo.title to silo.name -->
-        {/each}
-      </select>
-    </label>
-    {#if availableSilos.length === 0}
-      <p class="empty-silos-message">No silos found. Create a new silo first.</p>
-    {/if}
-  </div>
+    <div class="integration-selector" transition:fade>
+      <label>
+        Add tasks to existing silo:
+        <select bind:value={selectedSiloId}>
+          {#each availableSilos as silo}
+            <option value={silo.id}>{silo.name}</option>
+          {/each}
+        </select>
+      </label>
+      {#if availableSilos.length === 0}
+        <p class="empty-silos-message">No silos found. Create a new silo first.</p>
+      {/if}
+    </div>
   {/if}
 
   {#if showHelp}
@@ -315,141 +315,141 @@ async function refreshSilos() {
   {/if}
 
   {#if !tableVisible}
-  <div class="input-container">
-    <input
-      class="floating-input font-mono"
-      bind:value={newTask}
-      on:keydown={addTask}
-      on:focus={() => inputFocused = true}
-      on:blur={() => inputFocused = false}
-      class:focused={inputFocused}
-      placeholder="Type your task and press Enter..."
-      autofocus
-    />
-    
-    <div class="input-buttons">
-      <button 
-      on:click={() => applyColumnPreset('tasks')} 
-      class="input-button"
-      class:active={activePreset === 'tasks'}>
+    <div class="input-container">
+      <input
+        class="floating-input font-mono"
+        bind:value={newTask}
+        on:keydown={addTask}
+        on:focus={() => inputFocused = true}
+        on:blur={() => inputFocused = false}
+        class:focused={inputFocused}
+        placeholder="Type your task and press Enter..."
+        autofocus
+      />
       
-      <svg xmlns="http://www.w3.org/2000/svg"
-      width="16" height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round">
-   <path d="M9 12l2 2l4-4M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
- </svg>
-      
-      Tasks
-    </button>
+      <div class="input-buttons">
+        <button on:click={() => applyColumnPreset('tasks')} class="input-button" class:active={activePreset === 'tasks'}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 12l2 2l4-4M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"/>
+          </svg>
+          Tasks
+        </button>
         <button on:click={() => applyColumnPreset('client')} class="input-button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-            Client
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Client
         </button>
         <button on:click={() => applyColumnPreset('project')} class="input-button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="3" y1="9" x2="21" y2="9"></line>
-                <line x1="9" y1="21" x2="9" y2="9"></line>
-            </svg>
-            Project
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+            <line x1="9" y1="21" x2="9" y2="9"/>
+          </svg>
+          Project
         </button>
         <button on:click={() => applyColumnPreset('personal')} class="input-button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-            Personal
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          Personal
         </button>
         <button on:click={() => applyColumnPreset('commission')} class="input-button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-            </svg>
-            Commission
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+          </svg>
+          Commission
         </button>
+      </div>
     </div>
-</div>
-    {:else}
-        <div class="table-container" transition:fade={{ duration: 200 }}>
-            <table class="task-table">
-                <thead>
-                    <tr>
-                        {#each availableColumns.filter(c => c.visible) as col}
-                            <th>{col.label}</th>
-                        {/each}
-                        <th class="actions-header"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {#each tasks as task (task.id)}
-                        <tr class="task-row">
-                            {#each availableColumns.filter(c => c.visible) as col}
-                                <td>
-                                    {#if col.id === 'status'}
-                                        <div class="status-container">
-                                            <span class="status-icon" class:completed={task.status === 'completed'} class:in-progress={task.status === 'in-progress'}>
-                                                {@html statusIcons[task.status as StatusKey] || statusIcons['not-started']}
-                                            </span>
-                                            <select bind:value={task.status} class="status-select font-mono">
-                                                <option value="not-started">Not Started</option>
-                                                <option value="in-progress">In Progress</option>
-                                                <option value="completed">Completed</option>
-                                            </select>
-                                        </div>
-                                    {:else if col.id === 'priority'}
-                                        <select bind:value={task.priority} class="priority-select font-mono">
-                                            <option value="high">High</option>
-                                            <option value="medium">Medium</option>
-                                            <option value="low">Low</option>
-                                        </select>
-                                    {:else}
-                                        <input
-                                            class="font-mono"
-                                            bind:value={task[col.id]}
-                                            placeholder={col.label}
-                                            type={col.id === 'due_date' ? 'date' : 'text'}
-                                        />
-                                    {/if}
-                                </td>
-                            {/each}
-                            <td class="actions-cell">
-                                <button class="delete-button" on:click={() => deleteTask(task.id)}>
-                                    ✕
-                                </button>
-                            </td>
-                        </tr>
-                    {/each}
-                    <tr class="new-task-row">
-                        <td colspan={availableColumns.filter(c => c.visible).length}>
-                            <input
-                                class="font-mono"
-                                bind:value={newTask}
-                                on:keydown={addTask}
-                                placeholder="+ Add new task"
-                            />
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="controls">
-                <button class="control-button clear" on:click={clearTable}>Clear All</button>
-                <button class="control-button run" on:click={runDump}>
-                  {integrationMode ? 'Add to Silo' : 'Create New Silo'}
+  {:else}
+<div class="table-container" transition:fade={{ duration: 100 }}>
+  <table class="task-table">
+    <thead class="hover-section">
+      <tr class="column-headers">
+        {#each availableColumns.filter(c => c.visible) as col}
+          <th>{col.label}</th>
+        {/each}
+        <th class="actions-header"></th>
+      </tr>
+    </thead>
+    <tbody class="hover-section">
+      {#each tasks as task (task.id)}
+        <tr class="task-row">
+              {#each availableColumns.filter(c => c.visible) as col}
+                <td class:name-column={col.id === 'name'}>
+                  {#if col.id === 'status'}
+                    <div class="status-container">
+                      <span class="status-icon" class:completed={task.status === 'completed'} class:in-progress={task.status === 'in-progress'}>
+                        {@html statusIcons[task.status as StatusKey] || statusIcons['not-started']}
+                      </span>
+                      <select bind:value={task.status} class="status-select font-mono">
+                        <option value="not-started">Not Started</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </div>
+                  {:else if col.id === 'priority'}
+                    <select bind:value={task.priority} class="priority-select font-mono">
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                  {:else if col.id === 'due_date'}
+                    <input
+                      class="font-mono"
+                      type="date"
+                      bind:value={task.due_date}
+                      placeholder="Due date"
+                    />
+                  {:else if col.id === 'resources'}
+                    <input
+                      class="font-mono"
+                      type="text"
+                      bind:value={task.resources}
+                      placeholder="Resources"
+                    />
+                  {:else}
+                    <input
+                      class="font-mono"
+                      type="text"
+                      bind:value={task[col.id]}
+                      placeholder={col.label}
+                    />
+                  {/if}
+                </td>
+              {/each}
+              <td class="actions-cell">
+                <button class="delete-button" on:click={() => deleteTask(task.id)}>
+                  ✕
                 </button>
-            </div>
-        </div>
-    {/if}
+              </td>
+      </tr>
+      {/each}
+    </tbody>
+  </table>
+       <div class="new-task-input">
+    <input
+      class="font-mono"
+      bind:value={newTask}
+      on:keydown={addTask}
+      placeholder="+ Add new task"
+    />
+  </div>
+
+      <div class="controls">
+        <button class="control-button clear" on:click={clearTable}>Clear All</button>
+        <button class="control-button run" on:click={runDump}>
+          {integrationMode ? 'Add to Silo' : 'Create New Silo'}
+        </button>
+      </div>
+    </div>
+  {/if}
 </div>
 
 
@@ -551,6 +551,87 @@ async function refreshSilos() {
     .task-table th {
         position: relative;
     }
+
+  .task-table {
+    width: 100%;
+    border-collapse: collapse;
+    --column-opacity: 0;
+    --border-opacity: 0;
+    --button-opacity: 0.2;
+  }
+
+     .task-table:hover {
+    --column-opacity: 1;
+    --border-opacity: 0.3;
+    --button-opacity: 0.7;
+  }
+
+  .column-headers th {
+    opacity: var(--column-opacity);
+    transition: opacity 0.3s ease;
+    text-align: left;
+    padding: 8px;
+    border-bottom: 1px solid rgba(125 125 125 / var(--border-opacity));
+  }
+
+  .task-table td {
+    padding: 8px;
+    border-bottom: 1px solid rgba(125 125 125 / var(--border-opacity));
+    position: relative;
+  }
+
+  .task-table td:not(.name-column) > * {
+    opacity: var(--column-opacity);
+    transition: opacity 0.2s ease 0.1s;
+  }
+
+  .name-column input {
+    opacity: 1 !important;
+  }
+
+  .actions-cell {
+    opacity: var(--button-opacity);
+    transition: opacity 0.3s ease;
+  }
+
+  .delete-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-color);
+    padding: 4px;
+    transition: opacity 0.2s ease;
+  }
+
+  .task-table:hover .delete-button {
+    opacity: var(--button-opacity);
+  }
+
+  .task-table:hover .delete-button:hover {
+    opacity: 1;
+  }
+
+  input, select {
+    background: transparent;
+    border: 1px solid rgba(125 125 125 / var(--border-opacity));
+    border-radius: 4px;
+    padding: 4px 8px;
+    width: 100%;
+    transition: all 0.3s ease;
+  }
+
+  .status-icon.completed {
+    color: var(--success);
+  }
+
+  .status-icon.in-progress {
+    color: var(--warning);
+    animation: spin 2s linear infinite;
+  }
+
+  @keyframes spin {
+    100% { transform: rotate(360deg); }
+  }
 
     .task-table input {
         width: 100%;
@@ -728,6 +809,31 @@ async function refreshSilos() {
     color: var(--text-primary);
   }
 
+  .hover-section:hover ~ .hover-section,
+  .hover-section:hover {
+    --column-opacity: 1;
+    --border-opacity: 0.3;
+    --button-opacity: 0.7;
+  }
+   .column-headers th {
+    opacity: var(--column-opacity);
+    transition: opacity 0.3s ease;
+    border-bottom: 1px solid rgba(125 125 125 / var(--border-opacity));
+  }
+
+   .new-task-input {
+    padding: 12px 8px;
+    border-top: 1px solid rgba(125, 125, 125, 0.3);
+    margin-top: -1px;
+  }
+
+  .new-task-input input {
+    opacity: 1 !important;
+    border-color: rgba(125, 125, 125, 0.3) !important;
+    background: var(--background-color) !important;
+    width: 100%;
+  }
+
   .new-task-row td {
     padding: 10px;
   }
@@ -740,6 +846,13 @@ async function refreshSilos() {
     outline: none;
     color: var(--text-secondary);
     background: transparent;
+    opacity: 1 !important;
+  }
+  .new-task-row {
+    position: sticky;
+    bottom: 0;
+    background: var(--background-color);
+    z-index: 3;
   }
 
   /* Status styling */
